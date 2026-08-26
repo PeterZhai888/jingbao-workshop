@@ -128,6 +128,12 @@ export default function Home() {
           </li>
         </ol>
       </section>
+
+      <footer className="mt-8 pb-4 text-center text-xs text-gray-400">
+        <a href="/admin/login" className="hover:text-blue-500">
+          管理后台入口
+        </a>
+      </footer>
     </div>
   )
 }

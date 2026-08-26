@@ -4,6 +4,8 @@ import Home from './pages/Home.jsx'
 import Storyboard from './pages/Storyboard.jsx'
 import Titles from './pages/Titles.jsx'
 import History from './pages/History.jsx'
+import AdminLogin from './pages/admin/AdminLogin.jsx'
+import Admin from './pages/admin/Admin.jsx'
 import { useSession } from './context/SessionContext.jsx'
 
 /** 未激活卡密时只能访问首页，其余页面重定向回首页 */
@@ -42,6 +44,8 @@ export default function App() {
             </RequireSession>
           }
         />
+        <Route path="/admin/login" element={<AdminLogin />} />
+        <Route path="/admin" element={<Admin />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

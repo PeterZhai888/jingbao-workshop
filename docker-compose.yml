@@ -1,0 +1,12 @@
+services:
+  ai-video-toolbox:
+    build: .
+    container_name: ai-video-toolbox
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/server/data # SQLite 数据库与备份持久化
+    environment:
+      - TZ=Asia/Shanghai
+      # - TOKEN_SECRET=请替换为随机长字符串（可选，默认自动生成并持久化）
+    restart: unless-stopped
