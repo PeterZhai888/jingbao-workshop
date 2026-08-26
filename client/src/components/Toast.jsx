@@ -28,16 +28,13 @@ export function ToastProvider({ children }) {
         {toasts.map((t) => (
           <div
             key={t.id}
-            className={`animate-fade-in pointer-events-auto flex w-full max-w-sm items-start gap-2 rounded-lg px-4 py-3 text-sm shadow-lg ${
+            className={`animate-fade-in pointer-events-auto w-full max-w-sm rounded-lg px-4 py-2.5 text-center text-sm shadow-sm ${
               t.type === 'error'
                 ? 'bg-red-600 text-white'
                 : 'bg-gray-900 text-white'
             }`}
           >
-            <span className="shrink-0">
-              {t.type === 'error' ? '⚠️' : '✅'}
-            </span>
-            <span className="break-all">{t.message}</span>
+            {t.message}
           </div>
         ))}
       </div>

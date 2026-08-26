@@ -1,40 +1,35 @@
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useSession } from '../context/SessionContext.jsx'
 
-/** 顶部导航 + 底部移动端标签栏的响应式布局 */
+/** 顶部细导航 + 移动端底部纯文字标签栏 */
 export default function Layout({ children }) {
   const { session, logout } = useSession()
   const navigate = useNavigate()
 
   const navItems = [
-    { to: '/', label: '首页', icon: '🏠', end: true },
-    { to: '/storyboard', label: '分镜拆解', icon: '🎬' },
-    { to: '/titles', label: '标题生成', icon: '✨' },
-    { to: '/history', label: '历史记录', icon: '📋' },
+    { to: '/', label: '首页', end: true },
+    { to: '/storyboard', label: '分镜拆解' },
+    { to: '/titles', label: '标题生成' },
+    { to: '/history', label: '历史记录' },
   ]
 
   const linkClass = ({ isActive }) =>
-    `rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+    `px-2 py-1 text-sm transition-colors ${
       isActive
-        ? 'bg-blue-50 text-blue-700'
-        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+        ? 'font-medium text-gray-900'
+        : 'text-gray-500 hover:text-gray-900'
     }`
 
   return (
     <div className="flex min-h-full flex-col">
       {/* 顶部导航 */}
-      <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/90 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
-          <Link to="/" className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white">
-              🎬
-            </span>
-            <span className="text-base font-bold text-gray-900">
-              AI 短视频工具箱
-            </span>
+      <header className="sticky top-0 z-40 border-b border-gray-200 bg-white">
+        <div className="mx-auto flex h-12 max-w-4xl items-center justify-between px-5">
+          <Link to="/" className="text-[15px] font-semibold tracking-tight text-gray-900">
+            AI 短视频工具箱
           </Link>
 
-          <nav className="hidden items-center gap-1 sm:flex">
+          <nav className="hidden items-center gap-5 sm:flex">
             {navItems.map((item) => (
               <NavLink key={item.to} to={item.to} end={item.end} className={linkClass}>
                 {item.label}
@@ -42,10 +37,10 @@ export default function Layout({ children }) {
             ))}
           </nav>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-4">
             {session ? (
               <>
-                <span className="hidden max-w-[160px] truncate rounded-full bg-green-50 px-3 py-1 text-xs font-medium text-green-700 md:inline">
+                <span className="hidden max-w-[140px] truncate text-xs text-gray-400 md:inline">
                   {session.cardCode}
                 </span>
                 <button
@@ -53,16 +48,13 @@ export default function Layout({ children }) {
                     logout()
                     navigate('/')
                   }}
-                  className="rounded-lg px-3 py-2 text-sm text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                  className="text-sm text-gray-400 transition-colors hover:text-gray-900"
                 >
                   退出
                 </button>
               </>
             ) : (
-              <Link
-                to="/"
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-              >
+              <Link to="/" className="text-sm text-gray-500 transition-colors hover:text-gray-900">
                 激活卡密
               </Link>
             )}
@@ -71,7 +63,7 @@ export default function Layout({ children }) {
       </header>
 
       {/* 主内容区 */}
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-24 pt-6 sm:pb-10">
+      <main className="mx-auto w-full max-w-4xl flex-1 px-5 pb-20 pt-10 sm:pb-12">
         {children}
       </main>
 
@@ -84,12 +76,11 @@ export default function Layout({ children }) {
               to={item.to}
               end={item.end}
               className={({ isActive }) =>
-                `flex flex-col items-center gap-1 py-2 text-xs ${
-                  isActive ? 'text-blue-600' : 'text-gray-500'
+                `flex items-center justify-center py-3 text-xs transition-colors ${
+                  isActive ? 'font-medium text-gray-900' : 'text-gray-500'
                 }`
               }
             >
-              <span className="text-lg leading-none">{item.icon}</span>
               {item.label}
             </NavLink>
           ))}

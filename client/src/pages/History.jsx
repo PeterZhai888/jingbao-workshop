@@ -28,88 +28,73 @@ export default function History() {
   return (
     <div className="animate-fade-in">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">
-            📋 历史记录
-          </h1>
-          <p className="mt-1 text-sm text-gray-500">
-            共 {items.length} 条记录，仅保存在本地浏览器
-          </p>
-        </div>
+        <h1 className="text-lg font-semibold tracking-tight text-gray-900">
+          历史记录
+          <span className="ml-2 text-sm font-normal text-gray-400">{items.length} 条</span>
+        </h1>
 
         {items.length > 0 && (
           <button
             onClick={handleClear}
-            className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+            className={`text-sm underline-offset-4 transition-colors ${
               confirming
-                ? 'bg-red-600 text-white hover:bg-red-700'
-                : 'border border-red-200 bg-red-50 text-red-600 hover:bg-red-100'
+                ? 'font-medium text-red-600'
+                : 'text-gray-400 hover:text-red-600 hover:underline'
             }`}
           >
-            {confirming ? '确认清空？' : '🗑 一键清空'}
+            {confirming ? '确认清空？' : '清空记录'}
           </button>
         )}
       </div>
+      <p className="mt-1 text-xs text-gray-400">仅保存在本地浏览器</p>
 
-      {/* 空状态 */}
       {items.length === 0 && (
-        <div className="mt-8 rounded-xl border-2 border-dashed border-gray-200 py-16 text-center">
-          <div className="text-4xl">📭</div>
-          <p className="mt-3 text-sm text-gray-400">
-            还没有生成记录，去「分镜拆解」或「标题生成」试试吧
-          </p>
+        <div className="mt-10 rounded-lg border border-dashed border-gray-200 py-14 text-center text-sm text-gray-400">
+          暂无记录，去生成一条吧
         </div>
       )}
 
-      {/* 记录列表 */}
-      <div className="mt-6 space-y-3">
+      <div className="mt-6 divide-y divide-gray-100 border-y border-gray-200">
         {items.map((item) => (
-          <details
-            key={item.id}
-            className="group rounded-xl border border-gray-200 bg-white shadow-sm"
-          >
-            <summary className="flex cursor-pointer list-none items-center gap-3 p-4">
+          <details key={item.id} className="group">
+            <summary className="flex cursor-pointer list-none items-center gap-4 py-3.5 transition-colors hover:bg-gray-50">
               <span
-                className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                  item.type === 'storyboard'
-                    ? 'bg-blue-50 text-blue-600'
-                    : 'bg-purple-50 text-purple-600'
+                className={`shrink-0 text-xs ${
+                  item.type === 'storyboard' ? 'text-gray-600' : 'text-gray-600'
                 }`}
               >
-                {item.type === 'storyboard' ? '分镜拆解' : '标题生成'}
+                {item.type === 'storyboard' ? '分镜' : '标题'}
               </span>
-              <span className="min-w-0 flex-1 truncate text-sm text-gray-700">
+              <span className="min-w-0 flex-1 truncate text-sm text-gray-800">
                 {item.input || '（无输入内容）'}
               </span>
-              <span className="shrink-0 text-xs text-gray-400">
+              <span className="shrink-0 text-xs tabular-nums text-gray-400">
                 {formatTime(item.createdAt)}
               </span>
-              <span className="shrink-0 text-gray-400 transition group-open:rotate-180">
+              <span className="shrink-0 text-xs text-gray-300 transition group-open:rotate-180">
                 ▾
               </span>
             </summary>
 
-            <div className="border-t border-gray-100 p-4">
+            <div className="pb-4 pl-9 pr-4">
               {item.type === 'storyboard' ? (
                 <div className="space-y-2">
                   {item.output.map((s) => (
-                    <div key={s.index} className="rounded-lg bg-gray-50 p-3 text-sm">
+                    <div key={s.index} className="text-sm">
                       <div className="flex items-center justify-between text-xs text-gray-400">
-                        <span className="font-bold text-blue-600">镜头 #{s.index}</span>
-                        <span>
-                          {s.duration} · {s.camera}
-                        </span>
+                        <span>镜头 {s.index}</span>
+                        <span>{s.duration} · {s.camera}</span>
                       </div>
-                      <p className="mt-1 text-gray-700">{s.visual}</p>
-                      <p className="mt-1 text-gray-600">🎙 {s.narration}</p>
+                      <p className="mt-0.5 text-gray-700">{s.visual}</p>
+                      <p className="mt-0.5 text-gray-600">{s.narration}</p>
                     </div>
                   ))}
                 </div>
               ) : (
-                <ol className="space-y-1.5">
+                <ol className="space-y-1">
                   {item.output.map((t, i) => (
-                    <li key={i} className="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-700">
-                      <span className="mr-2 font-bold text-purple-500">{i + 1}.</span>
+                    <li key={i} className="text-sm text-gray-700">
+                      <span className="mr-2 tabular-nums text-gray-300">{i + 1}.</span>
                       {t}
                     </li>
                   ))}
