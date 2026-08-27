@@ -114,21 +114,33 @@ export interface ResolvedProvider {
   apiKey: string;
 }
 
-/** 解析当前生效的提供商配置（system_config 优先，环境变量兜底） */
-export function resolveProvider(preferred?: ProviderKey): ResolvedProvider | null {
-  const wanted = (preferred || (getSystemConfig('default_provider') as ProviderKey | null)) || 'qwen';
-  const def = PROVIDERS[wanted];
+/** 解析单个提供商的完整配置（Key 为空返回 null） */
+function resolveOne(key: ProviderKey): ResolvedProvider | null {
+  const def = PROVIDERS[key];
   if (!def) return null;
-
-  // API Key：system_config 存 ai_keys_<provider>（管理后台在线填写），环境变量兜底
   const keyFromDb = getSystemConfig(`ai_key_${def.key}`);
   const apiKey = keyFromDb || process.env[def.envKey] || '';
-
+  if (!apiKey) return null;
   const baseURL = (def.envBaseURL && process.env[def.envBaseURL]) || def.baseURL;
   const model = (def.envModel && process.env[def.envModel]) || getSystemConfig(`ai_model_${def.key}`) || def.model;
-
-  if (!apiKey) return null;
   return { key: def.key, label: def.label, baseURL, model, apiKey };
+}
+
+/**
+ * 解析当前生效的提供商配置（system_config 优先，环境变量兜底）
+ * 若首选提供商未配置 Key，自动回退到第一个已配置 Key 的提供商
+ */
+export function resolveProvider(preferred?: ProviderKey): ResolvedProvider | null {
+  const wanted = (preferred || (getSystemConfig('default_provider') as ProviderKey | null)) || 'qwen';
+  const first = resolveOne(wanted);
+  if (first) return first;
+
+  // 回退：按固定顺序找第一个已配置 Key 的提供商
+  for (const k of PROVIDER_KEYS) {
+    const fallback = resolveOne(k);
+    if (fallback) return fallback;
+  }
+  return null;
 }
 
 /** 全部提供商与配置状态（管理后台展示用，不返回密钥明文） */
@@ -154,6 +166,26 @@ export function listProviders() {
 export interface ChatMessage {
   role: 'system' | 'user';
   content: string;
+}
+
+// ===== HTTPS_PROXY 代理支持（Node fetch 默认不走代理，沙箱/企业网环境必需）=====
+let cachedProxyDispatcher: { dispatcher: unknown } | null | undefined;
+
+/** 读取代理环境变量，返回 fetch 的 dispatcher 选项；无代理环境返回 null */
+function getProxyDispatcher(): { dispatcher: unknown } | null {
+  if (cachedProxyDispatcher !== undefined) return cachedProxyDispatcher;
+  cachedProxyDispatcher = null;
+  const proxyUrl = process.env.HTTPS_PROXY || process.env.https_proxy || process.env.HTTP_PROXY || process.env.http_proxy;
+  if (!proxyUrl) return null;
+  try {
+    // undici 是 Node 内置 fetch 的底层实现，随 Node 一起安装
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { ProxyAgent } = require('undici') as { ProxyAgent: new (url: string) => unknown };
+    cachedProxyDispatcher = { dispatcher: new ProxyAgent(proxyUrl) };
+  } catch {
+    // undici 不可用时忽略，直连
+  }
+  return cachedProxyDispatcher;
 }
 
 export interface CallAIOptions {
@@ -201,7 +233,9 @@ export async function callAI(options: CallAIOptions): Promise<CallAIResult> {
           stream: false,
         }),
         signal: controller.signal,
-      });
+        // 沙箱/企业网络需走 HTTP(S)_PROXY 代理访问外部 API；Node fetch 默认不走代理
+        ...(getProxyDispatcher() ?? {}),
+      } as RequestInit);
 
       if (res.ok) {
         const data = (await res.json()) as {
