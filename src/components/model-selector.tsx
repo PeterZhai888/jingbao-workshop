@@ -123,6 +123,7 @@ export function ModelSelector({
                 <Sparkles className="h-3.5 w-3.5 text-primary" />
                 自动匹配
               </span>
+              <span className="text-xs text-muted-foreground">（系统选择当前最优模型）</span>
               <span className="ml-auto pl-3 text-xs text-muted-foreground">1次</span>
             </SelectItem>
             {catalog?.providers.map((p) => (
