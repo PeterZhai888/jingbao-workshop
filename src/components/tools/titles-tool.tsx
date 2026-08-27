@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useCardAuth } from '@/lib/card-auth';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -136,7 +136,7 @@ export function TitlesTool() {
           AI 爆款标题生成
         </h1>
         <p className="mt-1.5 text-muted-foreground text-sm sm:text-base">
-          输入视频主题，一次生成 10 组适配抖音 / B站 / 小红书的爆款标题
+          输入主题或粘贴完整文案，一次生成 10 组适配抖音 / B站 / 小红书的爆款标题
         </p>
       </div>
 
@@ -144,19 +144,26 @@ export function TitlesTool() {
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <TrendingUp className="h-5 w-5 text-primary" />
-            输入视频主题
+            输入视频主题或完整文案
           </CardTitle>
-          <CardDescription>简短描述核心内容或目标受众，生成更精准</CardDescription>
+          <CardDescription>支持两种方式：输入简短主题，或直接粘贴完整口播稿/文案（AI 自动提炼核心内容）</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex flex-col sm:flex-row gap-2">
-            <Input
-              placeholder="例如：平价手冲咖啡教程、独居女生快手早餐、杭州周末citywalk..."
+          <div className="space-y-2">
+            <Textarea
+              placeholder={'例如：&#10;&#10;平价手冲咖啡教程、独居女生快手早餐...&#10;&#10;或直接粘贴完整口播稿，AI 会自动提炼要点生成标题'}
               value={topic}
-              onChange={(e) => setTopic(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleGenerate(false)}
-              className="h-12 text-base"
+              onChange={(e) => setTopic(e.target.value.slice(0, 2000))}
+              className="min-h-[120px] resize-y text-base leading-relaxed"
             />
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>短主题或完整文案均可</span>
+              <span className={topic.length > 1900 ? 'text-destructive font-medium' : ''}>
+                {topic.length}/2000 字
+              </span>
+            </div>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2">
             <Button
               onClick={() => handleGenerate(false)}
               disabled={loading || !topic.trim()}

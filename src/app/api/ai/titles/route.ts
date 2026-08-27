@@ -7,10 +7,12 @@ import {
 } from '@/lib/server/card-service';
 import { callAI, extractJSON } from '@/lib/server/ai-provider';
 
-// 爆款标题生成的系统 Prompt：一次输出 10 组
+// 爆款标题生成的系统 Prompt：一次输出 10 组（支持短主题或完整文案）
 const SYSTEM_PROMPT = `你是顶级短视频爆款标题专家，深谙抖音、快手、B站、小红书的爆款逻辑。
-根据用户的视频主题，一次生成 10 组爆款标题。
+用户会给你一段内容，可能是简短的主题描述，也可能是完整的视频文案/口播稿。
+你的任务：一次生成 10 组爆款标题。
 要求：
+0. 如果输入是完整文案/口播稿，先在心中提炼出核心主题、亮点和目标受众（不要输出提炼过程），再基于提炼结果生成标题；如果输入是短主题则直接生成。
 1. 严格只输出一个 JSON 数组，包含 10 个字符串，不要任何解释文字。
 2. 标题风格要覆盖多样：悬念好奇、痛点共鸣、干货实用、反差对比、数字清单、情绪价值等。
 3. 每条标题 15-30 字，口语化、有网感、带钩子，适配抖音/小红书/B站。
@@ -70,7 +72,7 @@ export async function POST(request: NextRequest) {
   }
   const topic = (body.topic || '').trim();
   if (!topic) return NextResponse.json({ success: false, error: '缺少主题' }, { status: 400 });
-  if (topic.length > 200) return NextResponse.json({ success: false, error: '主题过长' }, { status: 400 });
+  if (topic.length > 2000) return NextResponse.json({ success: false, error: '内容过长，请精简到2000字以内' }, { status: 400 });
 
   const sens = checkSensitive(topic);
   if (!sens.ok) {
@@ -91,7 +93,7 @@ export async function POST(request: NextRequest) {
   const ai = await callAI({
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: `视频主题：${topic}` },
+      { role: 'user', content: `视频主题或完整文案：\n${topic}` },
     ],
     timeoutMs: 30_000,
   });
