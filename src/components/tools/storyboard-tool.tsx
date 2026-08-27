@@ -118,7 +118,7 @@ export function StoryboardTool() {
           return;
         }
         setResult(data.shots as StoryboardShot[]);
-        setResultMeta({ id: data.id, title: (data.title || '分镜脚本') + (data.provider ? ` · ${data.provider}` : '') });
+        setResultMeta({ id: data.id, title: data.title || '分镜脚本' });
         await refreshUsage();
         toast.success('分镜脚本生成成功！');
       }
@@ -311,7 +311,7 @@ export function StoryboardTool() {
             <div>
               <CardTitle className="text-lg flex items-center gap-2">
                 <Camera className="h-5 w-5 text-fuchsia-500" />
-                {resultMeta?.title || '分镜脚本结果'}
+                分镜脚本
               </CardTitle>
               <CardDescription>
                 {result ? (

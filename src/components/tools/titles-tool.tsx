@@ -101,7 +101,7 @@ export function TitlesTool() {
           return;
         }
         setTitles(data.titles as string[]);
-        setMeta({ id: data.id, topic: topic + (data.provider ? ` · ${data.provider}` : '') });
+        setMeta({ id: data.id, topic });
         await refreshUsage();
         toast.success('10组爆款标题已生成！');
       }
@@ -219,7 +219,7 @@ export function TitlesTool() {
           <div>
             <CardTitle className="text-lg flex items-center gap-2">
               <Hash className="h-5 w-5 text-primary" />
-              {meta?.topic ? `生成结果 · ${meta.topic}` : '爆款标题'}
+              爆款标题
             </CardTitle>
             <CardDescription>
               {titles ? `共 ${titles.length} 组 · 自动识别标题风格标签` : '等待生成...'}
