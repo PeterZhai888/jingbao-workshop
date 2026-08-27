@@ -399,7 +399,21 @@ function CardsPanel({ token }: { token: string }) {
             ) : (
               rows.map((c) => (
                 <TableRow key={c.id}>
-                  <TableCell className="font-mono text-xs font-semibold">{c.code}</TableCell>
+                  <TableCell className="font-mono text-xs font-semibold">
+                    <span className="inline-flex items-center gap-1.5 group">
+                      {c.code}
+                      <button
+                        className="rounded p-0.5 text-muted-foreground hover:text-primary transition-colors"
+                        title="复制卡密"
+                        onClick={() => {
+                          navigator.clipboard.writeText(c.code);
+                          toast.success('已复制：' + c.code);
+                        }}
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </button>
+                    </span>
+                  </TableCell>
                   <TableCell><StatusBadge status={c.status} /></TableCell>
                   <TableCell className="text-sm">{c.daily_limit} 次</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{c.activated_at?.slice(0, 16).replace('T', ' ') || '—'}</TableCell>
@@ -487,7 +501,19 @@ function CardsPanel({ token }: { token: string }) {
               </DialogHeader>
               <div className="max-h-72 overflow-auto rounded-lg border border-border/60 bg-slate-50 p-3 font-mono text-xs space-y-1">
                 {genResult.map((c) => (
-                  <div key={c}>{c}</div>
+                  <div key={c} className="flex items-center justify-between gap-2 group">
+                    <span>{c}</span>
+                    <button
+                      className="shrink-0 rounded p-1 text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-white hover:text-primary transition-opacity"
+                      title="复制此卡密"
+                      onClick={() => {
+                        navigator.clipboard.writeText(c);
+                        toast.success('已复制：' + c);
+                      }}
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 ))}
               </div>
               <DialogFooter>
