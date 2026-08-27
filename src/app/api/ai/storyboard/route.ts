@@ -7,6 +7,7 @@ import {
 } from '@/lib/server/card-service';
 import { callAI, extractJSON, PROVIDER_KEYS, getModelCost } from '@/lib/server/ai-provider';
 import type { ProviderKey } from '@/lib/server/ai-provider';
+import { checkGlobalGuard } from '@/lib/server/service-guard';
 import type { StoryboardShot } from '@/lib/types';
 
 // 分镜生成的系统 Prompt：要求输出严格 JSON（镜头数量由用户指定）
@@ -115,6 +116,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { success: false, code: 'DAILY_LIMIT', error: `今日剩余次数不足以完成本次生成（需${cost}次），请更换低档位模型或明天再来` },
       { status: 429 },
+    );
+  }
+
+  // 全局护栏：紧急暂停 + 全局每日上限（不通过时不扣次数）
+  const guard = checkGlobalGuard();
+  if (!guard.ok) {
+    return NextResponse.json(
+      { success: false, code: guard.code, error: guard.error },
+      { status: 503 },
     );
   }
 

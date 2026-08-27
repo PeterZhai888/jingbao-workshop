@@ -119,3 +119,40 @@ export interface UsageLogRow {
 }
 
 export { db };
+
+// ========= 数据库自动备份（启动时备份一次 + 每 24h 定时备份，保留最近 30 份） =========
+const BACKUP_KEEP_COUNT = 30;
+const BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+function backupDatabase(): void {
+  try {
+    const backupDir = path.join(path.dirname(path.resolve(process.cwd(), CONFIG.DB_PATH)), 'backups');
+    if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const backupPath = path.join(backupDir, `ai-video-tool_${stamp}.db`);
+    const promise = db.backup(backupPath);
+    // better-sqlite3 的 backup 返回 Promise；WAL 模式下安全快照，不阻塞写入
+    void promise.then(() => {
+      // 轮转：删除超出保留数量的最旧备份
+      try {
+        const files = fs
+          .readdirSync(backupDir)
+          .filter((f) => /^ai-video-tool_.*\.db$/.test(f))
+          .sort();
+        while (files.length > BACKUP_KEEP_COUNT) {
+          fs.unlinkSync(path.join(backupDir, files.shift()!));
+        }
+      } catch {
+        // 清理失败不影响主流程
+      }
+    }).catch((e: unknown) => {
+      console.error('[DB] 自动备份失败:', e instanceof Error ? e.message : e);
+    });
+  } catch (e) {
+    console.error('[DB] 自动备份异常:', e instanceof Error ? e.message : e);
+  }
+}
+
+// 启动后 30 秒做首次备份（避开启动高峰），之后每 24 小时一次
+setTimeout(backupDatabase, 30_000).unref?.();
+setInterval(backupDatabase, BACKUP_INTERVAL_MS).unref?.();

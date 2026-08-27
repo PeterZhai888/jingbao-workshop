@@ -3,8 +3,9 @@ import { authenticateAdmin } from '@/lib/server/auth';
 import { db } from '@/lib/server/db';
 import { CONFIG } from '@/lib/server/config';
 import { listProviders, PROVIDER_KEYS } from '@/lib/server/ai-provider';
+import { isUsingFallbackJwtSecret } from '@/lib/server/config';
 
-type ConfKey = 'default_provider' | 'daily_limit' | 'qps_limit' | 'tier_access' | `ai_key_${string}`;
+type ConfKey = 'default_provider' | 'daily_limit' | 'qps_limit' | 'tier_access' | 'service_paused' | 'global_daily_limit' | `ai_key_${string}`;
 
 export function GET(request: NextRequest) {
   const auth = authenticateAdmin(request);
@@ -24,6 +25,15 @@ export function GET(request: NextRequest) {
     },
     // 每家提供商的配置状态明细（不含密钥明文）
     providers: listProviders(),
+    // 运行护栏：紧急暂停开关 + 全局每日上限
+    guard: {
+      servicePaused: map.service_paused === '1',
+      globalDailyLimit: parseInt(map.global_daily_limit || '0', 10),
+    },
+    // 安全状态：JWT 密钥仍在用开发默认值时提醒（生产模式会在服务端拒绝启动，此标记主要覆盖开发/预览环境）
+    security: {
+      usingFallbackJwtSecret: isUsingFallbackJwtSecret,
+    },
   });
 }
 
@@ -69,6 +79,17 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: '参数非法: tier_access' }, { status: 400 });
       }
       write.run(key, v);
+    } else if (key === 'service_paused') {
+      // 紧急暂停开关：'1'=暂停所有生成（止损） / '0'=恢复
+      const v = raw === true || raw === '1' || raw === 1 ? '1' : '0';
+      write.run(key, v);
+    } else if (key === 'global_daily_limit') {
+      // 全局每日生成上限（全站所有卡合计；0=不限制）
+      const n = parseInt(String(raw), 10);
+      if (!Number.isFinite(n) || n < 0 || n > 1_000_000) {
+        return NextResponse.json({ success: false, error: '参数非法: global_daily_limit' }, { status: 400 });
+      }
+      write.run(key, String(n));
     } else if (key.startsWith('ai_key_')) {
       // 在线填写某家提供商的 API Key（如 ai_key_deepseek）
       const provider = key.slice('ai_key_'.length);

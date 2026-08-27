@@ -64,6 +64,7 @@ import {
   KeyRound,
   Cpu,
   Trash2,
+  ShieldAlert,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -880,6 +881,12 @@ interface ConfigData {
   tierAccess: string;
 }
 
+/** 运行护栏（紧急暂停 + 全局每日上限） */
+interface GuardConfig {
+  servicePaused: boolean;
+  globalDailyLimit: number;
+}
+
 // 模型选择器：预设下拉（含价格档位）+ 自定义输入兜底
 function ModelSelector({
   provider,
@@ -1024,6 +1031,11 @@ function ConfigPanel({ token }: { token: string }) {
   const [keyDrafts, setKeyDrafts] = useState<Record<string, string>>({});
   // 清除配置确认弹窗（待清除的服务商）
   const [clearTarget, setClearTarget] = useState<ProviderInfo | null>(null);
+  // JWT 密钥安全状态（true = 仍在用开发默认值）
+  const [usingFallbackJwtSecret, setUsingFallbackJwtSecret] = useState(false);
+  // 运行护栏
+  const [guard, setGuard] = useState<GuardConfig>({ servicePaused: false, globalDailyLimit: 0 });
+  const [guardSaving, setGuardSaving] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1033,6 +1045,8 @@ function ConfigPanel({ token }: { token: string }) {
       if (data.success) {
         setConfig(data.config);
         setProviders(data.providers || []);
+        setUsingFallbackJwtSecret(!!data.security?.usingFallbackJwtSecret);
+        if (data.guard) setGuard(data.guard);
       }
     } catch {
       toast.error('加载配置失败');
@@ -1069,6 +1083,33 @@ function ConfigPanel({ token }: { token: string }) {
       toast.error('网络错误');
     } finally {
       setSaving(false);
+    }
+  };
+
+  // 保存运行护栏（暂停开关 + 全局每日上限）
+  const handleSaveGuard = async (patch: Partial<GuardConfig>) => {
+    const next = { ...guard, ...patch };
+    setGuardSaving(true);
+    try {
+      const res = await fetch('/api/admin/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...withAuth(token) },
+        body: JSON.stringify({
+          service_paused: next.servicePaused ? '1' : '0',
+          global_daily_limit: String(next.globalDailyLimit),
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setGuard(next);
+        toast.success(next.servicePaused ? '已紧急暂停所有生成服务' : '运行护栏已保存');
+      } else {
+        toast.error(data.error || '保存失败');
+      }
+    } catch {
+      toast.error('网络错误');
+    } finally {
+      setGuardSaving(false);
     }
   };
 
@@ -1128,6 +1169,17 @@ function ConfigPanel({ token }: { token: string }) {
 
   return (
     <div className="space-y-6">
+      {/* JWT 密钥安全提醒（开发默认密钥仅允许本地调试；生产环境服务端会拒绝启动） */}
+      {usingFallbackJwtSecret && (
+        <div className="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            当前 JWT 密钥使用开发默认值，存在伪造登录令牌风险。部署生产环境前请通过环境变量
+            <code className="mx-1 rounded bg-amber-100 px-1 py-0.5 text-xs">JWT_SECRET</code>
+            注入强随机密钥（如 <code className="rounded bg-amber-100 px-1 py-0.5 text-xs">openssl rand -hex 32</code> 生成）。生产模式下未配置将拒绝启动。
+          </span>
+        </div>
+      )}
       {/* 基础配置 */}
       <Card>
         <CardHeader>
@@ -1191,6 +1243,64 @@ function ConfigPanel({ token }: { token: string }) {
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
             保存基础配置
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* 运行护栏：紧急暂停 + 全局每日上限（止损用） */}
+      <Card className={guard.servicePaused ? 'border-destructive/40' : undefined}>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <ShieldAlert className={`h-5 w-5 ${guard.servicePaused ? 'text-destructive' : 'text-amber-500'}`} />
+            运行护栏（止损保护）
+            {guard.servicePaused && (
+              <Badge variant="outline" className="bg-rose-50 text-rose-700 border-rose-200">
+                已暂停
+              </Badge>
+            )}
+          </CardTitle>
+          <CardDescription>
+            紧急情况（如 Key 泄露、恶意刷量）可一键暂停所有生成；全局每日上限按全站成功生成次数合计计算，0 为不限制
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-medium">紧急暂停生成服务</div>
+              <div className="text-xs text-muted-foreground">暂停后用户端所有生成请求立即返回“系统维护中”，不消耗任何次数</div>
+            </div>
+            <Button
+              variant={guard.servicePaused ? 'default' : 'destructive'}
+              disabled={guardSaving}
+              className="gap-1.5 shrink-0"
+              onClick={() => {
+                setGuardSaving(true);
+                handleSaveGuard({ servicePaused: !guard.servicePaused });
+              }}
+            >
+              {guardSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
+              {guard.servicePaused ? '恢复服务' : '紧急暂停'}
+            </Button>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-medium">全局每日生成上限</div>
+              <div className="text-xs text-muted-foreground">全站所有卡密当日成功生成次数合计达到该值后，当日停止服务（防止 API 账单失控）</div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Input
+                type="number"
+                min={0}
+                max={1000000}
+                className="w-28"
+                value={guard.globalDailyLimit}
+                onChange={(e) => setGuard((g) => ({ ...g, globalDailyLimit: parseInt(e.target.value, 10) || 0 }))}
+              />
+              <Button variant="outline" disabled={guardSaving} onClick={() => handleSaveGuard({})} className="gap-1.5">
+                {guardSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                保存
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
