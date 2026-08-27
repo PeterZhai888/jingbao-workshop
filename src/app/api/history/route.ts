@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateCard } from '@/lib/server/auth';
-import { listGeneratedHistory } from '@/lib/server/card-service';
+import { listGeneratedHistory, deleteGeneratedHistory, clearGeneratedHistory } from '@/lib/server/card-service';
 
 export function GET(request: NextRequest) {
   const auth = authenticateCard(request);
@@ -38,4 +38,31 @@ export function GET(request: NextRequest) {
   });
 
   return NextResponse.json({ success: true, items });
+}
+
+/**
+ * 删除历史记录：
+ * - 带 ?id=xxx 删除单条
+ * - 不带 id 清空该卡密全部记录
+ */
+export async function DELETE(request: NextRequest) {
+  const auth = authenticateCard(request);
+  if (!auth.ok) {
+    return NextResponse.json(
+      { success: false, code: auth.code, error: auth.error },
+      { status: auth.status || 401 },
+    );
+  }
+
+  const id = request.nextUrl.searchParams.get('id');
+  if (id) {
+    const deleted = deleteGeneratedHistory(id, auth.cardId!);
+    if (!deleted) {
+      return NextResponse.json({ success: false, error: '记录不存在或已删除' }, { status: 404 });
+    }
+    return NextResponse.json({ success: true, deleted: 1 });
+  }
+
+  const count = clearGeneratedHistory(auth.cardId!);
+  return NextResponse.json({ success: true, deleted: count });
 }

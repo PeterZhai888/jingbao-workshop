@@ -16,6 +16,9 @@ import {
   FileJson,
   Inbox as Empty,
   Trash2,
+  Copy,
+  CheckCircle2,
+  ChevronDown,
 } from 'lucide-react';
 import type { HistoryItem, StoryboardResult, TitleResult } from '@/lib/types';
 import {
@@ -40,11 +43,22 @@ function isStoryboard(item: HistoryItem): item is StoryboardResult {
   return item.type === 'storyboard';
 }
 
+/** 输入摘要（前 20 字），用于列表项与折叠态 */
+function inputSummary(text: string): string {
+  const oneLine = text.replace(/\s+/g, ' ').trim();
+  return oneLine.length > 20 ? oneLine.slice(0, 20) + '...' : oneLine;
+}
+
 export default function HistoryPage() {
   const { session } = useCardAuth();
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [selected, setSelected] = useState<HistoryItem | null>(null);
+  const [inputExpanded, setInputExpanded] = useState(false);
+  const [copiedAll, setCopiedAll] = useState(false);
+  const [copiedShot, setCopiedShot] = useState<number | null>(null);
+  const [copiedTitle, setCopiedTitle] = useState<number | null>(null);
+  const [clearing, setClearing] = useState(false);
 
   const loadHistory = async () => {
     setLoading(true);
@@ -83,12 +97,86 @@ export default function HistoryPage() {
     loadHistory();
   }, [session]);
 
-  const handleDelete = (id: string) => {
-    setItems((prev) => prev.filter((i) => i.id !== id));
+  // 切换选中记录时重置折叠/复制状态
+  useEffect(() => {
+    setInputExpanded(false);
+    setCopiedAll(false);
+    setCopiedShot(null);
+    setCopiedTitle(null);
+  }, [selected?.id]);
+
+  const handleDelete = async (id: string) => {
+    // 乐观移除
+    const prev = items;
+    setItems((cur) => cur.filter((i) => i.id !== id));
     if (selected?.id === id) setSelected(null);
-    // 同步到本地
-    localStorage.setItem('ai_video_tool_history', JSON.stringify(items.filter((i) => i.id !== id)));
-    toast.success('已删除该记录');
+    try {
+      const res = await fetch(`/api/history?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${session?.token}` },
+      });
+      if (!res.ok) throw new Error();
+      toast.success('已删除该记录');
+    } catch {
+      setItems(prev); // 失败回滚
+      toast.error('删除失败，请稍后再试');
+    }
+  };
+
+  const handleClearAll = async () => {
+    setClearing(true);
+    const prev = items;
+    setItems([]);
+    setSelected(null);
+    try {
+      const res = await fetch('/api/history', {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${session?.token}` },
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error();
+      toast.success(`已清空全部 ${data.deleted} 条记录`);
+    } catch {
+      setItems(prev); // 失败回滚
+      toast.error('清空失败，请稍后再试');
+    } finally {
+      setClearing(false);
+    }
+  };
+
+  // ===== 复制 =====
+  const storyboardToText = (item: StoryboardResult) =>
+    item.shots
+      .map(
+        (s) =>
+          `【镜头${s.shotNumber}】时长：${s.duration} | 运镜：${s.cameraMove}\n画面：${s.sceneDescription}\n台词：${s.dialogue || '（无）'}`,
+      )
+      .join('\n\n');
+
+  const titlesToText = (item: TitleResult) =>
+    item.titles.map((t, i) => `${i + 1}. ${t}`).join('\n');
+
+  const handleCopyAll = () => {
+    if (!selected) return;
+    const text = isStoryboard(selected) ? storyboardToText(selected) : titlesToText(selected);
+    navigator.clipboard.writeText(text);
+    setCopiedAll(true);
+    setTimeout(() => setCopiedAll(false), 2000);
+    toast.success('已复制全部内容');
+  };
+
+  const handleCopyShot = (item: StoryboardResult, idx: number) => {
+    const s = item.shots[idx];
+    const text = `【镜头${s.shotNumber}】时长：${s.duration} | 运镜：${s.cameraMove}\n画面：${s.sceneDescription}\n台词：${s.dialogue || '（无）'}`;
+    navigator.clipboard.writeText(text);
+    setCopiedShot(idx);
+    setTimeout(() => setCopiedShot(null), 1500);
+  };
+
+  const handleCopyTitle = (item: TitleResult, idx: number) => {
+    navigator.clipboard.writeText(item.titles[idx]);
+    setCopiedTitle(idx);
+    setTimeout(() => setCopiedTitle(null), 1500);
   };
 
   return (
@@ -113,7 +201,38 @@ export default function HistoryPage() {
                   <Calendar className="h-5 w-5 text-primary" />
                   生成记录
                 </span>
-                <Badge variant="secondary">{items.length} 条</Badge>
+                <span className="flex items-center gap-2">
+                  <Badge variant="secondary">{items.length} 条</Badge>
+                  {items.length > 0 && (
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={clearing}
+                          className="h-7 px-2 gap-1 text-destructive hover:text-destructive"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          清空
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>确认清空全部记录？</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            将删除全部 {items.length} 条历史记录，删除后不可恢复，确定要清空吗？
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>取消</AlertDialogCancel>
+                          <AlertDialogAction onClick={handleClearAll} className="bg-destructive hover:bg-destructive/90">
+                            确认清空
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  )}
+                </span>
               </CardTitle>
               <CardDescription>最近生成的内容会显示在上方</CardDescription>
             </CardHeader>
@@ -157,13 +276,13 @@ export default function HistoryPage() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between gap-2">
-                              <Badge variant="outline" className="text-xs h-5">
-                                {isStory ? '分镜脚本' : '爆款标题'}
-                              </Badge>
+                              <span className="text-sm font-medium">
+                                {isStory ? `分镜脚本 · ${item.shots.length} 镜` : `爆款标题 · ${item.titles.length} 组`}
+                              </span>
                               <ChevronRight className={`h-4 w-4 text-muted-foreground transition-transform ${active ? 'rotate-90' : ''}`} />
                             </div>
-                            <div className="mt-1.5 text-sm font-medium line-clamp-1">
-                              {isStory ? item.title : item.inputText}
+                            <div className="mt-1.5 text-sm text-muted-foreground line-clamp-1">
+                              {inputSummary(item.inputText)}
                             </div>
                             <div className="mt-1 text-xs text-muted-foreground flex items-center gap-1">
                               <Calendar className="h-3 w-3" />
@@ -187,9 +306,9 @@ export default function HistoryPage() {
                   {selected ? (
                     <span className="flex items-center gap-2">
                       {isStoryboard(selected) ? (
-                        <><Clapperboard className="h-5 w-5 text-primary" /> {selected.title}</>
+                        <><Clapperboard className="h-5 w-5 text-primary" /> 分镜脚本 · {selected.shots.length} 镜</>
                       ) : (
-                        <><Sparkles className="h-5 w-5 text-fuchsia-500" /> 爆款标题 · {selected.inputText}</>
+                        <><Sparkles className="h-5 w-5 text-fuchsia-500" /> 爆款标题 · {selected.titles.length} 组</>
                       )}
                     </span>
                   ) : (
@@ -201,28 +320,34 @@ export default function HistoryPage() {
                 </CardDescription>
               </div>
               {selected && (
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button size="sm" variant="ghost" className="gap-1.5 h-9 text-destructive hover:text-destructive">
-                      <Trash2 className="h-4 w-4" />
-                      删除
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>确认删除？</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        删除后不可恢复，确定要删除这条记录吗？
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>取消</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => handleDelete(selected.id)} className="bg-destructive hover:bg-destructive/90">
-                        确认删除
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" onClick={handleCopyAll} className="gap-1.5 h-9">
+                    {copiedAll ? <CheckCircle2 className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+                    {copiedAll ? '已复制' : '复制全部'}
+                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button size="sm" variant="ghost" className="gap-1.5 h-9 text-destructive hover:text-destructive">
+                        <Trash2 className="h-4 w-4" />
+                        删除
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>确认删除？</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          删除后不可恢复，确定要删除这条记录吗？
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>取消</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => handleDelete(selected.id)} className="bg-destructive hover:bg-destructive/90">
+                          确认删除
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
               )}
             </CardHeader>
             <CardContent>
@@ -233,60 +358,97 @@ export default function HistoryPage() {
                   </div>
                   <p className="text-muted-foreground">点击左侧记录查看详情</p>
                 </div>
-              ) : isStoryboard(selected) ? (
-                <div className="space-y-3">
-                  <div className="rounded-xl bg-slate-50 border border-border/60 p-4 text-sm">
-                    <div className="font-semibold text-primary text-xs mb-1.5">输入文案</div>
-                    <p className="leading-relaxed text-muted-foreground whitespace-pre-wrap">{selected.inputText}</p>
-                  </div>
-                  <div className="space-y-2.5">
-                    {selected.shots.map((shot) => (
-                      <div
-                        key={shot.shotNumber}
-                        className="rounded-xl border border-border/60 p-4 bg-white"
-                      >
-                        <div className="flex flex-wrap items-center gap-2 mb-2">
-                          <Badge variant="secondary" className="bg-primary text-primary-foreground">
-                            镜头 {String(shot.shotNumber).padStart(2, '0')}
-                          </Badge>
-                          <Badge variant="outline" className="text-xs">时长 {shot.duration}</Badge>
-                          <Badge variant="outline" className="text-xs text-fuchsia-700 border-fuchsia-200 bg-fuchsia-50/50">
-                            {shot.cameraMove}
-                          </Badge>
-                        </div>
-                        <div className="text-sm">
-                          <span className="font-semibold text-xs">画面 · </span>
-                          <span className="leading-relaxed">{shot.sceneDescription}</span>
-                        </div>
-                        {shot.dialogue && (
-                          <div className="mt-2 rounded-lg bg-slate-50 border-l-2 border-indigo-400 px-3 py-2 text-sm">
-                            <span className="font-semibold text-indigo-600 text-xs">台词 · </span>
-                            <span>{shot.dialogue}</span>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
               ) : (
                 <div className="space-y-3">
-                  <div className="rounded-xl bg-slate-50 border border-border/60 p-4 text-sm">
-                    <div className="font-semibold text-fuchsia-600 text-xs mb-1.5">视频主题</div>
-                    <p className="leading-relaxed text-muted-foreground">{selected.inputText}</p>
-                  </div>
-                  <div className="space-y-2.5">
-                    {selected.titles.map((t, i) => (
-                      <div
-                        key={i}
-                        className="rounded-xl border border-border/60 bg-white p-3.5 text-sm flex items-start gap-3"
-                      >
-                        <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-fuchsia-100 text-fuchsia-700 text-xs font-bold">
-                          {i + 1}
+                  {/* 输入原文：默认折叠，点击展开 */}
+                  <div className="rounded-xl bg-slate-50 border border-border/60">
+                    <button
+                      type="button"
+                      onClick={() => setInputExpanded((v) => !v)}
+                      className="w-full flex items-center justify-between gap-2 p-4 text-left"
+                    >
+                      <span className="min-w-0">
+                        <span className={`font-semibold text-xs ${isStoryboard(selected) ? 'text-primary' : 'text-fuchsia-600'} mr-2`}>
+                          {isStoryboard(selected) ? '输入文案' : '视频主题'}
                         </span>
-                        <p className="leading-relaxed">{t}</p>
-                      </div>
-                    ))}
+                        {!inputExpanded && (
+                          <span className="text-sm text-muted-foreground">{inputSummary(selected.inputText)}</span>
+                        )}
+                      </span>
+                      <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${inputExpanded ? 'rotate-180' : ''}`} />
+                    </button>
+                    {inputExpanded && (
+                      <p className="px-4 pb-4 pt-0 text-sm leading-relaxed text-muted-foreground whitespace-pre-wrap">
+                        {selected.inputText}
+                      </p>
+                    )}
                   </div>
+
+                  {/* 结果 */}
+                  {isStoryboard(selected) ? (
+                    <div className="space-y-2.5">
+                      {selected.shots.map((shot, idx) => {
+                        const shotCopied = copiedShot === idx;
+                        return (
+                          <div
+                            key={shot.shotNumber}
+                            className="group rounded-xl border border-border/60 p-4 bg-white"
+                          >
+                            <div className="flex flex-wrap items-center gap-2 mb-2">
+                              <Badge variant="secondary" className="bg-primary text-primary-foreground">
+                                镜头 {String(shot.shotNumber).padStart(2, '0')}
+                              </Badge>
+                              <Badge variant="outline" className="text-xs">时长 {shot.duration}</Badge>
+                              <Badge variant="outline" className="text-xs text-fuchsia-700 border-fuchsia-200 bg-fuchsia-50/50">
+                                {shot.cameraMove}
+                              </Badge>
+                              <button
+                                onClick={() => handleCopyShot(selected, idx)}
+                                className="ml-auto shrink-0 rounded-lg border border-border p-1.5 text-muted-foreground hover:text-primary hover:border-primary/40 hover:bg-primary/5 transition-colors opacity-0 group-hover:opacity-100"
+                                title="复制这个镜头"
+                              >
+                                {shotCopied ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                              </button>
+                            </div>
+                            <div className="text-sm">
+                              <span className="font-semibold text-xs">画面 · </span>
+                              <span className="leading-relaxed">{shot.sceneDescription}</span>
+                            </div>
+                            {shot.dialogue && (
+                              <div className="mt-2 rounded-lg bg-slate-50 border-l-2 border-indigo-400 px-3 py-2 text-sm">
+                                <span className="font-semibold text-indigo-600 text-xs">台词 · </span>
+                                <span>{shot.dialogue}</span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {selected.titles.map((t, i) => {
+                        const titleCopied = copiedTitle === i;
+                        return (
+                          <div
+                            key={i}
+                            className="group rounded-xl border border-border/60 bg-white p-3.5 text-sm flex items-start gap-3"
+                          >
+                            <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-fuchsia-100 text-fuchsia-700 text-xs font-bold">
+                              {i + 1}
+                            </span>
+                            <p className="leading-relaxed flex-1">{t}</p>
+                            <button
+                              onClick={() => handleCopyTitle(selected, i)}
+                              className="shrink-0 rounded-lg border border-border p-1.5 text-muted-foreground hover:text-primary hover:border-primary/40 hover:bg-primary/5 transition-colors opacity-0 group-hover:opacity-100"
+                              title="复制这条"
+                            >
+                              {titleCopied ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>

@@ -138,6 +138,22 @@ export function batchInsertCards(codes: string[], opts?: { validDays?: number; d
   return tx(codes);
 }
 
+/** 删除单条生成历史（校验归属卡密） */
+export function deleteGeneratedHistory(id: string, cardId: number): boolean {
+  const result = db
+    .prepare('DELETE FROM generated_history WHERE id = ? AND card_id = ?')
+    .run(id, cardId);
+  return result.changes > 0;
+}
+
+/** 清空某卡密的全部生成历史，返回删除条数 */
+export function clearGeneratedHistory(cardId: number): number {
+  const result = db
+    .prepare('DELETE FROM generated_history WHERE card_id = ?')
+    .run(cardId);
+  return result.changes;
+}
+
 /** 写入生成历史（storyboard / titles） */
 export function saveGeneratedHistory(params: {
   id: string;
