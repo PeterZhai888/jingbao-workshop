@@ -5,19 +5,35 @@ import {
   touchCardUsage,
   saveGeneratedHistory,
 } from '@/lib/server/card-service';
+import { callAI, extractJSON } from '@/lib/server/ai-provider';
 
-const MOCK_TEMPLATES = [
-  '闺蜜都看傻了！这个{topic}也太绝了吧',
-  '后悔没早知道！{topic}的正确打开方式',
-  '99%的人都做错了！{topic}避坑指南',
-  '被问爆了！这个{topic}我愿意安利给所有人',
-  '打工人必看！5分钟搞定{topic}',
-  '我妈以为我月薪几万…其实全靠这个{topic}',
-  '实测｜{topic}真实体验，看完再决定买不买',
-  '求求你们别再这样{topic}了！难怪没效果',
-  '内行人偷偷在用！{topic}隐藏玩法大公开',
-  '别再踩坑了！{topic}选对这一样就够了',
-];
+// 爆款标题生成的系统 Prompt：一次输出 10 组
+const SYSTEM_PROMPT = `你是顶级短视频爆款标题专家，深谙抖音、快手、B站、小红书的爆款逻辑。
+根据用户的视频主题，一次生成 10 组爆款标题。
+要求：
+1. 严格只输出一个 JSON 数组，包含 10 个字符串，不要任何解释文字。
+2. 标题风格要覆盖多样：悬念好奇、痛点共鸣、干货实用、反差对比、数字清单、情绪价值等。
+3. 每条标题 15-30 字，口语化、有网感、带钩子，适配抖音/小红书/B站。
+4. 可以适当使用数字、感叹号、省略号增强冲击力，但每条不要超过 1 个 emoji。
+5. 10 条标题思路必须明显不同，禁止同质化。
+示例输出格式：
+["标题1","标题2","标题3"]`;
+
+// 降级模板（AI 失败时不扣次数）
+function fallbackTitles(topic: string): string[] {
+  return [
+    `关于${topic}，看这一条就够了`,
+    `后悔没早知道！${topic}的正确打开方式`,
+    `99%的人都做错了${topic}，快看你中招没`,
+    `被问爆了！${topic}保姆级攻略来了`,
+    `别再瞎摸索了，${topic}其实很简单`,
+    `实测一个月，${topic}真实效果大公开`,
+    `内行人偷偷在用的${topic}技巧`,
+    `${topic}避坑指南，第3条太真实了`,
+    `一分钟学会${topic}，新手也能上手`,
+    `看完这条，你对${topic}的理解会刷新`,
+  ];
+}
 
 export async function POST(request: NextRequest) {
   const auth = authenticateCard(request);
@@ -71,9 +87,73 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: '输入内容包含违规词，请修改后重试' }, { status: 400 });
   }
 
-  // ========= Prompt3 这里接真实 LLM =========
-  await new Promise((r) => setTimeout(r, 500));
-  const titles = MOCK_TEMPLATES.map((t) => t.replace('{topic}', topic));
+  // ========= 调用真实 LLM =========
+  const ai = await callAI({
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: `视频主题：${topic}` },
+    ],
+    timeoutMs: 30_000,
+  });
+
+  if (!ai.ok) {
+    writeUsageLog({
+      cardId: cardId!,
+      cardCode: cardCode!,
+      action: 'titles',
+      success: false,
+      ip,
+      userAgent,
+      fingerprint,
+      detail: `AI_FALLBACK: ${ai.error} (${ai.provider})`,
+    });
+    return NextResponse.json(
+      {
+        success: false,
+        code: 'AI_BUSY',
+        error: 'AI服务繁忙，请稍后再试',
+        fallback: { titles: fallbackTitles(topic), note: '以下为基础模板标题（本次不消耗次数），稍后可重新生成' },
+      },
+      { status: 503 },
+    );
+  }
+
+  const parsed = extractJSON<string[]>(ai.content);
+  if (!parsed || !Array.isArray(parsed) || parsed.length < 3) {
+    writeUsageLog({
+      cardId: cardId!,
+      cardCode: cardCode!,
+      action: 'titles',
+      success: false,
+      ip,
+      userAgent,
+      fingerprint,
+      detail: `AI_PARSE_FAIL (${ai.provider})`,
+    });
+    return NextResponse.json(
+      {
+        success: false,
+        code: 'AI_BUSY',
+        error: 'AI服务繁忙，请稍后再试',
+        fallback: { titles: fallbackTitles(topic), note: '以下为基础模板标题（本次不消耗次数），稍后可重新生成' },
+      },
+      { status: 503 },
+    );
+  }
+
+  const titles = parsed.map((t) => String(t).trim()).filter(Boolean).slice(0, 10);
+  if (titles.length < 3) {
+    return NextResponse.json(
+      {
+        success: false,
+        code: 'AI_BUSY',
+        error: 'AI服务繁忙，请稍后再试',
+        fallback: { titles: fallbackTitles(topic), note: '以下为基础模板标题（本次不消耗次数），稍后可重新生成' },
+      },
+      { status: 503 },
+    );
+  }
+
   const id = 'tl_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
 
   writeUsageLog({
@@ -84,7 +164,7 @@ export async function POST(request: NextRequest) {
     ip,
     userAgent,
     fingerprint,
-    detail: { topicLen: topic.length },
+    detail: { topicLen: topic.length, titlesCount: titles.length, provider: ai.provider },
   });
 
   saveGeneratedHistory({
@@ -98,5 +178,5 @@ export async function POST(request: NextRequest) {
 
   touchCardUsage(cardId!, ip!, fingerprint!);
 
-  return NextResponse.json({ success: true, id, titles });
+  return NextResponse.json({ success: true, id, titles, provider: ai.provider });
 }

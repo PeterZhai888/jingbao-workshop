@@ -5,22 +5,33 @@ import {
   touchCardUsage,
   saveGeneratedHistory,
 } from '@/lib/server/card-service';
+import { callAI, extractJSON } from '@/lib/server/ai-provider';
+import type { StoryboardShot } from '@/lib/types';
 
-// =========== Prompt 2 占位实现（Prompt 3 阶段接入真实 LLM） ===========
-// 当前依然返回模拟分镜，但已经完整：
-//  - 鉴权通过
-//  - 次数检查与扣减（通过 writeUsageLog action=storyboard success=1 来计数）
-//  - 敏感词过滤
-//  - 指纹/IP 校验
-//  - 历史记录落库（generated_history）
-//  - 成功后 touch + refreshUsage
-const MOCK_SHOTS = [
-  { shotNumber: 1, sceneDescription: '开场全景：交代场景与时间，营造氛围', dialogue: '', duration: '3秒', cameraMove: '固定机位' },
-  { shotNumber: 2, sceneDescription: '主角入场：交代人物身份与状态', dialogue: '旁白：点题一句话，说明今天要讲的事', duration: '5秒', cameraMove: '推镜，中景→特写' },
-  { shotNumber: 3, sceneDescription: '关键动作：突出核心操作或亮点', dialogue: '（环境音或轻快BGM）', duration: '4秒', cameraMove: '跟拍/近景' },
-  { shotNumber: 4, sceneDescription: '情绪反应：给用户情绪共鸣或价值点', dialogue: '旁白：点出痛点解决/感受', duration: '6秒', cameraMove: '环绕运镜' },
-  { shotNumber: 5, sceneDescription: '收尾+引导：引导点赞/关注/评论', dialogue: '字幕：加话题标签，评论区互动引导', duration: '3秒', cameraMove: '固定，淡出' },
-];
+// 分镜生成的系统 Prompt：要求输出严格 JSON
+const SYSTEM_PROMPT = `你是专业的短视频分镜编剧。根据用户的视频文案，输出一份分镜脚本。
+要求：
+1. 输出 5-8 个镜头（文案长可适当增加，最多不超过 12 个）。
+2. 严格只输出 JSON 数组，不要任何解释文字、不要 markdown 代码块之外的说明。
+3. 每个镜头包含以下字段：
+   - shotNumber: 镜头序号（从 1 开始的整数）
+   - sceneDescription: 画面描述（中文，具体到人物动作、场景、光线氛围，40-80字）
+   - dialogue: 台词或旁白（可为空字符串；有台词时标注说话人，如"旁白：""女主："）
+   - duration: 预估时长（如"3秒"、"5秒"，单个镜头一般 2-8 秒）
+   - cameraMove: 运镜建议（如"固定机位"、"推镜，中景→特写"、"环绕运镜"、"跟拍"）
+4. 分镜节奏要适配抖音/快手/视频号竖屏短视频，前 3 秒必须抓住观众。
+示例输出格式：
+[{"shotNumber":1,"sceneDescription":"...","dialogue":"旁白：...","duration":"3秒","cameraMove":"固定机位"}]`;
+
+// 降级用的通用分镜模板（AI 失败时不扣次数，直接返回结构化提示）
+function fallbackShots(text: string): StoryboardShot[] {
+  return [
+    { shotNumber: 1, sceneDescription: `开场：围绕「${text.slice(0, 16)}」构建视觉冲击力强的第一帧，快速锁定注意力`, dialogue: '旁白：一句话点题，勾起好奇', duration: '3秒', cameraMove: '固定机位' },
+    { shotNumber: 2, sceneDescription: '展开：交代核心内容的关键画面与人物状态', dialogue: '', duration: '5秒', cameraMove: '推镜，中景→特写' },
+    { shotNumber: 3, sceneDescription: '高潮：突出最有价值的操作或情绪点', dialogue: '旁白：讲清痛点与解决方式', duration: '5秒', cameraMove: '跟拍/近景' },
+    { shotNumber: 4, sceneDescription: '收尾：总结价值并引导互动', dialogue: '字幕：#短视频 #干货，评论区聊聊', duration: '3秒', cameraMove: '固定，淡出' },
+  ];
+}
 
 export async function POST(request: NextRequest) {
   const auth = authenticateCard(request);
@@ -76,12 +87,73 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: '输入内容包含违规词，请修改后重试' }, { status: 400 });
   }
 
-  // ========= Prompt3 这里会调用真实LLM =========
-  // 模拟延迟
-  await new Promise((r) => setTimeout(r, 600));
+  // ========= 调用真实 LLM =========
+  const ai = await callAI({
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: `视频文案：\n${text}` },
+    ],
+    timeoutMs: 45_000, // 分镜生成内容较长，放宽到 45 秒
+  });
+
+  // AI 失败 → 降级提示，不扣次数、不写成功日志
+  if (!ai.ok) {
+    writeUsageLog({
+      cardId: cardId!,
+      cardCode: cardCode!,
+      action: 'storyboard',
+      success: false,
+      ip,
+      userAgent,
+      fingerprint,
+      detail: `AI_FALLBACK: ${ai.error} (${ai.provider})`,
+    });
+    return NextResponse.json(
+      {
+        success: false,
+        code: 'AI_BUSY',
+        error: 'AI服务繁忙，请稍后再试',
+        fallback: { shots: fallbackShots(text), note: '以下为基础模板分镜（本次不消耗次数），稍后可重新生成' },
+      },
+      { status: 503 },
+    );
+  }
+
+  // 解析 LLM 输出
+  const parsed = extractJSON<StoryboardShot[]>(ai.content);
+  if (!parsed || !Array.isArray(parsed) || parsed.length === 0 || !parsed[0]?.sceneDescription) {
+    writeUsageLog({
+      cardId: cardId!,
+      cardCode: cardCode!,
+      action: 'storyboard',
+      success: false,
+      ip,
+      userAgent,
+      fingerprint,
+      detail: `AI_PARSE_FAIL (${ai.provider})`,
+    });
+    return NextResponse.json(
+      {
+        success: false,
+        code: 'AI_BUSY',
+        error: 'AI服务繁忙，请稍后再试',
+        fallback: { shots: fallbackShots(text), note: '以下为基础模板分镜（本次不消耗次数），稍后可重新生成' },
+      },
+      { status: 503 },
+    );
+  }
+
+  // 规范化镜头数据（序号重排 + 字段兜底）
+  const shots: StoryboardShot[] = parsed.slice(0, 12).map((s, i) => ({
+    shotNumber: typeof s.shotNumber === 'number' ? s.shotNumber : i + 1,
+    sceneDescription: String(s.sceneDescription || ''),
+    dialogue: String(s.dialogue || ''),
+    duration: String(s.duration || '3秒'),
+    cameraMove: String(s.cameraMove || '固定机位'),
+  }));
+
   const title = (text.slice(0, 12) + (text.length > 12 ? '...' : '')) + ' · 分镜脚本';
   const id = 'sb_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-  const shots = MOCK_SHOTS;
 
   // 写使用日志（success=1 即算扣次）
   writeUsageLog({
@@ -92,7 +164,7 @@ export async function POST(request: NextRequest) {
     ip,
     userAgent,
     fingerprint,
-    detail: { inputLen: text.length, shotsCount: shots.length },
+    detail: { inputLen: text.length, shotsCount: shots.length, provider: ai.provider },
   });
 
   // 写生成历史
@@ -112,5 +184,6 @@ export async function POST(request: NextRequest) {
     id,
     title,
     shots,
+    provider: ai.provider,
   });
 }

@@ -84,11 +84,18 @@ export function StoryboardTool() {
             toast.error('登录状态已失效，请重新验证卡密');
             return;
           }
+          // AI 失败降级：展示基础模板分镜（本次不消耗次数）
+          if (data.code === 'AI_BUSY' && data.fallback?.shots) {
+            setResult(data.fallback.shots as StoryboardShot[]);
+            setResultMeta({ id: 'fallback', title: '基础模板分镜（AI繁忙降级，本次不扣次数）' });
+            toast.warning('AI服务繁忙，已展示基础模板（本次不消耗次数），请稍后重试');
+            return;
+          }
           toast.error(data.error || '生成失败，请稍后再试');
           return;
         }
         setResult(data.shots as StoryboardShot[]);
-        setResultMeta({ id: data.id, title: data.title || '分镜脚本' });
+        setResultMeta({ id: data.id, title: (data.title || '分镜脚本') + (data.provider ? ` · ${data.provider}` : '') });
         await refreshUsage();
         toast.success('分镜脚本生成成功！');
       }
