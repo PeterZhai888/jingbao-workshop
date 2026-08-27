@@ -1,58 +1,34 @@
 import type { Metadata } from 'next';
 import { Inspector } from 'react-dev-inspector';
 import './globals.css';
+import { Toaster } from '@/components/ui/sonner';
+import { SiteHeader } from '@/components/site-header';
+import { CardAuthProvider } from '@/lib/card-auth';
 
 export const metadata: Metadata = {
   title: {
-    default: '新应用 | 扣子编程',
-    template: '%s | 扣子编程',
+    default: 'AI短视频工具箱 - 一键生成爆款脚本与标题',
+    template: '%s | AI短视频工具箱',
   },
   description:
-    '扣子编程是一款一站式云端 Vibe Coding 开发平台。通过对话轻松构建智能体、工作流和网站，实现从创意到上线的无缝衔接。',
+    'AI短视频创作工具箱，支持文本转专业分镜脚本、AI爆款标题生成。无需注册，输入卡密即可使用。',
   keywords: [
-    '扣子编程',
-    'Coze Code',
-    'Vibe Coding',
-    'AI 编程',
-    '智能体搭建',
-    '工作流搭建',
-    '网站搭建',
-    '网站部署',
-    '全栈开发',
-    'AI 工程师',
+    'AI短视频',
+    '分镜脚本',
+    '爆款标题',
+    '短视频创作',
+    'AI工具',
+    '抖音',
+    'B站',
+    '小红书',
   ],
-  authors: [{ name: 'Coze Code Team', url: 'https://code.coze.cn' }],
-  generator: 'Coze Code',
-  // icons: {
-  //   icon: '',
-  // },
+  authors: [{ name: 'AI Video Studio' }],
   openGraph: {
-    title: '扣子编程 | 你的 AI 工程师已就位',
+    title: 'AI短视频工具箱 | 一键生成爆款脚本与标题',
     description:
-      '我正在使用扣子编程 Vibe Coding，让创意瞬间上线。告别拖拽，拥抱心流。',
-    url: 'https://code.coze.cn',
-    siteName: '扣子编程',
+      '文本转专业分镜脚本、AI爆款标题生成。9.9元/月，每日20次AI生成额度。',
     locale: 'zh_CN',
     type: 'website',
-    // images: [
-    //   {
-    //     url: '',
-    //     width: 1200,
-    //     height: 630,
-    //     alt: '扣子编程 - 你的 AI 工程师',
-    //   },
-    // ],
-  },
-  // twitter: {
-  //   card: 'summary_large_image',
-  //   title: 'Coze Code | Your AI Engineer is Here',
-  //   description:
-  //     'Build and deploy full-stack applications through AI conversation. No env setup, just flow.',
-  //   // images: [''],
-  // },
-  robots: {
-    index: true,
-    follow: true,
   },
 };
 
@@ -64,10 +40,21 @@ export default function RootLayout({
   const isDev = process.env.NODE_ENV === 'development';
 
   return (
-    <html lang="en">
+    <html lang="zh-CN">
       <body className={`antialiased`}>
         {isDev && <Inspector />}
-        {children}
+        <CardAuthProvider>
+          <SiteHeader />
+          <main className="mx-auto w-full max-w-6xl px-4 sm:px-6 py-6 sm:py-10">
+            {children}
+          </main>
+          <footer className="border-t border-border/60 bg-white/60 mt-12">
+            <div className="mx-auto max-w-6xl px-4 sm:px-6 py-6 text-center text-sm text-muted-foreground">
+              © {new Date().getFullYear()} AI短视频工具箱 · 让创作更简单
+            </div>
+          </footer>
+        </CardAuthProvider>
+        <Toaster position="top-center" richColors closeButton />
       </body>
     </html>
   );
