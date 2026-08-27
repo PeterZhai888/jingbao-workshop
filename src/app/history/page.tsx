@@ -14,7 +14,7 @@ import {
   Loader2,
   ChevronRight,
   FileJson,
-  Empty,
+  Inbox as Empty,
   Trash2,
 } from 'lucide-react';
 import type { HistoryItem, StoryboardResult, TitleResult } from '@/lib/types';

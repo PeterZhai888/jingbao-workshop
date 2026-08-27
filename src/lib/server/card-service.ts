@@ -1,0 +1,186 @@
+// 卡密领域服务：状态机 + 次数 + 限流 + 有效期校验
+
+import { db, CardRow, CardStatus } from '@/lib/server/db';
+import { CONFIG } from '@/lib/server/config';
+import { todayStartKey } from '@/lib/server/card-utils';
+
+/**
+ * 统一更新过期状态：任何查询/操作前把过了期的 active 置为 expired
+ */
+export function autoExpire(): void {
+  db.prepare(
+    `UPDATE cards SET status = 'expired'
+     WHERE status = 'active' AND expires_at IS NOT NULL AND datetime('now') >= datetime(expires_at)`,
+  ).run();
+}
+
+export function getCardByCode(code: string): CardRow | undefined {
+  autoExpire();
+  return db.prepare('SELECT * FROM cards WHERE code = ?').get(code) as CardRow | undefined;
+}
+
+export function getCardById(id: number): CardRow | undefined {
+  autoExpire();
+  return db.prepare('SELECT * FROM cards WHERE id = ?').get(id) as CardRow | undefined;
+}
+
+/** 判断卡密当前是否可用（未冻结/未作废/未过期，未激活的 unused 算可用，激活后自己置 active） */
+export function isCardUsable(card: CardRow): { ok: boolean; reason?: string } {
+  switch (card.status) {
+    case 'unused':
+      return { ok: true };
+    case 'active':
+      if (card.expires_at && new Date(card.expires_at).getTime() < Date.now()) {
+        return { ok: false, reason: '卡密已过期' };
+      }
+      return { ok: true };
+    case 'frozen':
+      return { ok: false, reason: '卡密已被冻结，请联系客服' };
+    case 'revoked':
+      return { ok: false, reason: '卡密已作废' };
+    case 'expired':
+      return { ok: false, reason: '卡密已过期' };
+    default:
+      return { ok: false, reason: '卡密状态异常' };
+  }
+}
+
+/** 激活卡密（首次验证通过时调用） */
+export function activateCard(cardId: number): void {
+  const now = new Date().toISOString();
+  const expire = new Date(Date.now() + CONFIG.CARD_VALID_DAYS * 24 * 3600 * 1000).toISOString();
+  db.prepare(
+    `UPDATE cards SET status = 'active', activated_at = COALESCE(activated_at, ?), expires_at = COALESCE(expires_at, ?) WHERE id = ?`,
+  ).run(now, expire, cardId);
+}
+
+/** 更新最后使用信息（IP/指纹/时间） */
+export function touchCardUsage(cardId: number, ip: string, fingerprint: string): void {
+  db.prepare(
+    `UPDATE cards SET last_used_at = datetime('now'), last_ip = ?, last_fingerprint = ? WHERE id = ?`,
+  ).run(ip, fingerprint, cardId);
+}
+
+/** 查当日已用次数（基于服务器时区今日） */
+export function getDailyUsed(cardId: number): number {
+  const dayKey = todayStartKey();
+  const row = db
+    .prepare(
+      `SELECT COUNT(*) AS cnt FROM usage_logs
+       WHERE card_id = ?
+         AND success = 1
+         AND action IN ('storyboard', 'titles')
+         AND substr(created_at, 1, 10) = ?`,
+    )
+    .get(cardId, dayKey) as { cnt: number };
+  return row?.cnt || 0;
+}
+
+/** 同一卡密近 60 秒的请求数（用于防刷） */
+export function getRecentMinuteCalls(cardId: number): number {
+  const row = db
+    .prepare(
+      `SELECT COUNT(*) AS cnt FROM usage_logs
+       WHERE card_id = ? AND created_at >= datetime('now', '-60 seconds')`,
+    )
+    .get(cardId) as { cnt: number };
+  return row?.cnt || 0;
+}
+
+/** 写一条使用日志（cardId 可空，用于卡密不存在时也能记录失败日志） */
+export function writeUsageLog(params: {
+  cardId?: number;
+  cardCode: string;
+  action: string;
+  success: boolean;
+  ip?: string;
+  userAgent?: string;
+  fingerprint?: string;
+  detail?: unknown;
+}): void {
+  db.prepare(
+    `INSERT INTO usage_logs (card_id, card_code, action, success, ip, user_agent, fingerprint, detail)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    params.cardId ?? null,
+    params.cardCode,
+    params.action,
+    params.success ? 1 : 0,
+    params.ip || null,
+    params.userAgent || null,
+    params.fingerprint || null,
+    params.detail == null ? null : typeof params.detail === 'string' ? params.detail : JSON.stringify(params.detail),
+  );
+}
+
+/** 状态变更：冻结/解冻/作废 */
+export function setCardStatus(code: string, status: CardStatus): boolean {
+  const result = db.prepare(`UPDATE cards SET status = ? WHERE code = ?`).run(status, code);
+  return (result.changes || 0) > 0;
+}
+
+/** 批量插入卡密（返回插入成功条数） */
+export function batchInsertCards(codes: string[], opts?: { validDays?: number; dailyLimit?: number; remark?: string }): number {
+  const validDays = opts?.validDays ?? CONFIG.CARD_VALID_DAYS;
+  const dailyLimit = opts?.dailyLimit ?? CONFIG.DAILY_LIMIT;
+  const remark = opts?.remark ?? null;
+  const insert = db.prepare(
+    `INSERT OR IGNORE INTO cards (code, status, valid_days, daily_limit, remark) VALUES (?, 'unused', ?, ?, ?)`,
+  );
+  const tx = db.transaction((list: string[]) => {
+    let n = 0;
+    for (const code of list) {
+      const r = insert.run(code, validDays, dailyLimit, remark);
+      if (r.changes) n++;
+    }
+    return n;
+  });
+  return tx(codes);
+}
+
+/** 写入生成历史（storyboard / titles） */
+export function saveGeneratedHistory(params: {
+  id: string;
+  cardId: number;
+  cardCode: string;
+  type: 'storyboard' | 'titles';
+  inputText: string;
+  outputJson: unknown;
+}): void {
+  db.prepare(
+    `INSERT OR IGNORE INTO generated_history (id, card_id, card_code, type, input_text, output_json) VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(
+    params.id,
+    params.cardId,
+    params.cardCode,
+    params.type,
+    params.inputText,
+    JSON.stringify(params.outputJson),
+  );
+}
+
+/** 查某卡密的生成历史（最近 100 条） */
+export function listGeneratedHistory(cardId: number, limit = 100) {
+  const rows = db
+    .prepare(
+      `SELECT id, type, input_text, output_json, created_at
+       FROM generated_history
+       WHERE card_id = ?
+       ORDER BY created_at DESC
+       LIMIT ?`,
+    )
+    .all(cardId, limit) as Array<{
+    id: string;
+    type: 'storyboard' | 'titles';
+    input_text: string;
+    output_json: string;
+    created_at: string;
+  }>;
+  return rows.map((r) => ({
+    id: r.id,
+    type: r.type,
+    inputText: r.input_text,
+    createdAt: r.created_at,
+    output: JSON.parse(r.output_json),
+  }));
+}
