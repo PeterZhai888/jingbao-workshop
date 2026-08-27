@@ -72,6 +72,8 @@ const ADMIN_SESSION_KEY = 'ai_video_tool_admin_session';
 interface AdminSession {
   token: string;
   admin: { id: number; username: string; role: string };
+  /** 登录时检测：是否仍在使用出厂默认密码（true 时页面顶部显示提醒条） */
+  usingDefaultPassword?: boolean;
 }
 
 // ========= 通用 =========
@@ -91,6 +93,14 @@ function StatusBadge({ status }: { status: string }) {
   const meta = STATUS_META[status] || STATUS_META.unused;
   return <Badge variant="outline" className={meta.cls}>{meta.label}</Badge>;
 }
+
+// 有效期快捷选项（1个月=30天 … 1年=365天）
+const QUICK_VALID_OPTIONS = [
+  { label: '1个月', days: 30 },
+  { label: '3个月', days: 90 },
+  { label: '6个月', days: 180 },
+  { label: '1年', days: 365 },
+] as const;
 
 // ========= 登录页 =========
 function AdminLogin({ onLogin }: { onLogin: (s: AdminSession) => void }) {
@@ -146,7 +156,11 @@ function AdminLogin({ onLogin }: { onLogin: (s: AdminSession) => void }) {
         fetchCaptcha();
         return;
       }
-      const session: AdminSession = { token: data.token, admin: data.admin };
+      const session: AdminSession = {
+        token: data.token,
+        admin: data.admin,
+        usingDefaultPassword: !!data.usingDefaultPassword,
+      };
       localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(session));
       toast.success('登录成功');
       onLogin(session);
@@ -549,6 +563,22 @@ function CardsPanel({ token }: { token: string }) {
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium">有效期(天)</label>
                   <Input type="number" min={1} value={genValidDays} onChange={(e) => setGenValidDays(e.target.value)} />
+                  <div className="flex flex-wrap gap-1 pt-0.5">
+                    {QUICK_VALID_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.days}
+                        type="button"
+                        className={`rounded-full border px-2 py-0.5 text-xs transition-colors ${
+                          genValidDays === String(opt.days)
+                            ? 'border-primary bg-primary text-primary-foreground'
+                            : 'border-border/60 bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground'
+                        }`}
+                        onClick={() => setGenValidDays(String(opt.days))}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium">每日上限</label>
@@ -1326,10 +1356,109 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
   );
 }
 
+// ========= 修改密码弹窗 =========
+function ChangePasswordDialog({
+  token,
+  open,
+  onOpenChange,
+  onChanged,
+}: {
+  token: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onChanged: () => void;
+}) {
+  const [oldPwd, setOldPwd] = useState('');
+  const [newPwd, setNewPwd] = useState('');
+  const [confirmPwd, setConfirmPwd] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const reset = () => {
+    setOldPwd('');
+    setNewPwd('');
+    setConfirmPwd('');
+    setLoading(false);
+  };
+
+  const handleSubmit = async () => {
+    if (!oldPwd || !newPwd || !confirmPwd) {
+      toast.error('请填写完整');
+      return;
+    }
+    if (newPwd !== confirmPwd) {
+      toast.error('两次输入的新密码不一致');
+      return;
+    }
+    if (newPwd.length < 8 || !/[a-zA-Z]/.test(newPwd) || !/\d/.test(newPwd)) {
+      toast.error('新密码需至少8位，且同时包含字母和数字');
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch('/api/admin/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...withAuth(token) },
+        body: JSON.stringify({ oldPassword: oldPwd, newPassword: newPwd }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success('密码已修改，请重新登录');
+        reset();
+        onOpenChange(false);
+        onChanged();
+      } else {
+        toast.error(data.error || '修改失败');
+      }
+    } catch {
+      toast.error('网络错误');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) reset(); }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>修改管理员密码</DialogTitle>
+          <DialogDescription>新密码需至少8位，且同时包含字母和数字；修改成功后需重新登录</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">旧密码</label>
+            <Input type="password" value={oldPwd} onChange={(e) => setOldPwd(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">新密码</label>
+            <Input type="password" value={newPwd} onChange={(e) => setNewPwd(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">确认新密码</label>
+            <Input
+              type="password"
+              value={confirmPwd}
+              onChange={(e) => setConfirmPwd(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
+          <Button onClick={handleSubmit} disabled={loading} className="gap-1.5">
+            {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+            确认修改
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ========= 页面入口 =========
 export default function AdminPage() {
   const [session, setSession] = useState<AdminSession | null>(null);
   const [ready, setReady] = useState(false);
+  const [pwdOpen, setPwdOpen] = useState(false);
 
   useEffect(() => {
     const stored = localStorage.getItem(ADMIN_SESSION_KEY);
@@ -1372,6 +1501,11 @@ export default function AdminPage() {
               </Button>
             </Link>
             {session && (
+              <Button variant="outline" size="sm" onClick={() => setPwdOpen(true)} className="gap-1.5">
+                <KeyRound className="h-4 w-4" /> 修改密码
+              </Button>
+            )}
+            {session && (
               <Button variant="outline" size="sm" onClick={handleLogout} className="gap-1.5 text-destructive hover:text-destructive">
                 <LogOut className="h-4 w-4" /> 退出
               </Button>
@@ -1381,6 +1515,17 @@ export default function AdminPage() {
       </header>
 
       <main className="mx-auto max-w-6xl px-4 sm:px-6 py-8">
+        {session?.usingDefaultPassword && (
+          <div className="mb-6 flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <span>
+              <Lock className="mr-1.5 inline h-4 w-4" />
+              当前仍在使用默认密码，存在安全风险，建议立即修改
+            </span>
+            <Button size="sm" variant="outline" className="shrink-0 gap-1.5 border-amber-300 text-amber-800 hover:bg-amber-100 hover:text-amber-900" onClick={() => setPwdOpen(true)}>
+              <KeyRound className="h-3.5 w-3.5" /> 立即修改
+            </Button>
+          </div>
+        )}
         {!ready ? (
           <div className="py-32 text-center">
             <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
@@ -1398,6 +1543,21 @@ export default function AdminPage() {
           AI短视频工具箱 · 管理后台
         </div>
       </footer>
+
+      {session && (
+        <ChangePasswordDialog
+          token={session.token}
+          open={pwdOpen}
+          onOpenChange={setPwdOpen}
+          onChanged={() => {
+            // 密码已变更，强制登出重新登录
+            setPwdOpen(false);
+            localStorage.removeItem(ADMIN_SESSION_KEY);
+            setSession(null);
+            toast.success('密码已修改，请重新登录');
+          }}
+        />
+      )}
     </div>
   );
 }

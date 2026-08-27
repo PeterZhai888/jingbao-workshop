@@ -4,6 +4,7 @@ import { db } from '@/lib/server/db';
 import { signAdminToken } from '@/lib/server/jwt';
 import { isIpLocked, recordLoginFail, verifyCaptcha, clearLoginFail } from '@/lib/server/admin-captcha';
 import { getClientIP } from '@/lib/server/card-utils';
+import { CONFIG } from '@/lib/server/config';
 
 export async function POST(request: NextRequest) {
   const ip = getClientIP(request.headers);
@@ -49,10 +50,14 @@ export async function POST(request: NextRequest) {
     `UPDATE admin_users SET last_login_at = datetime('now'), last_login_ip = ?, login_fail_count = 0 WHERE id = ?`,
   ).run(ip, row!.id);
 
+  // 登录成功后检测：当前密码是否仍为出厂默认密码（提醒管理员尽快修改）
+  const usingDefaultPassword = bcrypt.compareSync(CONFIG.DEFAULT_ADMIN_PASSWORD, row!.password_hash);
+
   const token = signAdminToken({ adminId: row!.id, username: row!.username });
   return NextResponse.json({
     success: true,
     token,
     admin: { id: row!.id, username: row!.username, role: row!.role },
+    usingDefaultPassword,
   });
 }
