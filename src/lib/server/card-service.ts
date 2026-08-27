@@ -61,19 +61,28 @@ export function touchCardUsage(cardId: number, ip: string, fingerprint: string):
   ).run(ip, fingerprint, cardId);
 }
 
-/** 查当日已用次数（基于服务器时区今日） */
+/** 查当日已用次数（基于服务器时区今日；按模型档位成本加权，detail.cost 为空算 1 次） */
 export function getDailyUsed(cardId: number): number {
   const dayKey = todayStartKey();
-  const row = db
+  const rows = db
     .prepare(
-      `SELECT COUNT(*) AS cnt FROM usage_logs
+      `SELECT detail FROM usage_logs
        WHERE card_id = ?
          AND success = 1
          AND action IN ('storyboard', 'titles')
          AND substr(created_at, 1, 10) = ?`,
     )
-    .get(cardId, dayKey) as { cnt: number };
-  return row?.cnt || 0;
+    .all(cardId, dayKey) as Array<{ detail: string | null }>;
+  return rows.reduce((sum, r) => {
+    let cost = 1;
+    if (r.detail) {
+      try {
+        const d = JSON.parse(r.detail) as { cost?: number };
+        if (typeof d.cost === 'number' && d.cost > 0) cost = d.cost;
+      } catch { /* detail 非 JSON 时按 1 次 */ }
+    }
+    return sum + cost;
+  }, 0);
 }
 
 /** 同一卡密近 60 秒的请求数（用于防刷） */

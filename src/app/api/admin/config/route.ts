@@ -4,7 +4,7 @@ import { db } from '@/lib/server/db';
 import { CONFIG } from '@/lib/server/config';
 import { listProviders, PROVIDER_KEYS } from '@/lib/server/ai-provider';
 
-type ConfKey = 'default_provider' | 'daily_limit' | 'qps_limit' | `ai_key_${string}`;
+type ConfKey = 'default_provider' | 'daily_limit' | 'qps_limit' | 'tier_access' | `ai_key_${string}`;
 
 export function GET(request: NextRequest) {
   const auth = authenticateAdmin(request);
@@ -20,6 +20,7 @@ export function GET(request: NextRequest) {
       defaultProvider: map.default_provider || 'qwen',
       dailyLimit: parseInt(map.daily_limit || String(CONFIG.DAILY_LIMIT), 10),
       qpsLimit: parseInt(map.qps_limit || '10', 10),
+      tierAccess: map.tier_access || 'all',
     },
     // 每家提供商的配置状态明细（不含密钥明文）
     providers: listProviders(),
@@ -61,6 +62,13 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: '参数非法: qps_limit' }, { status: 400 });
       }
       write.run(key, String(n));
+    } else if (key === 'tier_access') {
+      // 用户端开放档位：all=全开 / standard=到标准版 / plus=到高质量版
+      const v = String(raw ?? '').trim();
+      if (!['all', 'standard', 'plus'].includes(v)) {
+        return NextResponse.json({ success: false, error: '参数非法: tier_access' }, { status: 400 });
+      }
+      write.run(key, v);
     } else if (key.startsWith('ai_key_')) {
       // 在线填写某家提供商的 API Key（如 ai_key_deepseek）
       const provider = key.slice('ai_key_'.length);

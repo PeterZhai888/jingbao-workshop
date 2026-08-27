@@ -58,41 +58,65 @@ const PROVIDERS: Record<ProviderKey, ProviderDef> = {
 /** 全部提供商 key（校验用） */
 export const PROVIDER_KEYS = Object.keys(PROVIDERS) as ProviderKey[];
 
-/** 每家服务商的精选模型清单（含价格档位标注，管理后台下拉可选） */
-export const MODEL_CATALOG: Record<ProviderKey, Array<{ id: string; label: string }>> = {
+/**
+ * 模型档位（用户端展示语言）：
+ * - fast   ⚡ 极速版：快、便宜/免费，扣 1 次
+ * - standard 💎 标准版：均衡默认，扣 1 次
+ * - plus   💎 高质量版：更强创意，扣 2 次
+ * - flagship 👑 旗舰版：最强质量、稍慢，扣 3 次
+ */
+export type ModelTier = 'fast' | 'standard' | 'plus' | 'flagship';
+
+export interface CatalogModel {
+  id: string;
+  label: string;   // 管理后台展示用（技术名+说明）
+  tier: ModelTier; // 用户端档位
+  note: string;    // 用户端一句话用途说明
+}
+
+/** 档位元信息（用户端展示统一来源） */
+export const TIER_META: Record<ModelTier, { label: string; icon: string; cost: number; desc: string }> = {
+  fast:     { label: '极速版', icon: '⚡', cost: 1, desc: '速度快，适合日常生成' },
+  standard: { label: '标准版', icon: '💎', cost: 1, desc: '均衡之选，文案质量佳' },
+  plus:     { label: '高质量版', icon: '💎', cost: 2, desc: '更强创意，适合精写' },
+  flagship: { label: '旗舰版', icon: '👑', cost: 3, desc: '最强质量，速度稍慢' },
+};
+
+/** 每家服务商的精选模型清单（管理后台下拉可选；tier/note 供用户端档位展示） */
+export const MODEL_CATALOG: Record<ProviderKey, CatalogModel[]> = {
   qwen: [
-    { id: 'qwen-turbo', label: 'qwen-turbo · 低价高速（默认）' },
-    { id: 'qwen-plus', label: 'qwen-plus · 标准价，能力均衡' },
-    { id: 'qwen-max', label: 'qwen-max · 旗舰价，最强能力' },
-    { id: 'qwen-flash', label: 'qwen-flash · 免费额度，极低价' },
+    { id: 'qwen-turbo', label: 'qwen-turbo · 低价高速（默认）', tier: 'fast', note: '速度快，适合日常生成' },
+    { id: 'qwen-flash', label: 'qwen-flash · 免费额度，极低价', tier: 'fast', note: '免费额度，速度快' },
+    { id: 'qwen-plus', label: 'qwen-plus · 标准价，能力均衡', tier: 'plus', note: '更强创意，适合精写' },
+    { id: 'qwen-max', label: 'qwen-max · 旗舰价，最强能力', tier: 'flagship', note: '最强质量，速度稍慢' },
   ],
   zhipu: [
-    { id: 'glm-4-flash', label: 'glm-4-flash · 免费（默认）' },
-    { id: 'glm-4-air', label: 'glm-4-air · 低价' },
-    { id: 'glm-4-airx', label: 'glm-4-airx · 低价加速' },
-    { id: 'glm-4-plus', label: 'glm-4-plus · 标准价' },
-    { id: 'glm-4-long', label: 'glm-4-long · 长文本' },
+    { id: 'glm-4-flash', label: 'glm-4-flash · 免费（默认）', tier: 'fast', note: '免费额度，速度快' },
+    { id: 'glm-4-air', label: 'glm-4-air · 低价', tier: 'standard', note: '均衡之选，文案质量佳' },
+    { id: 'glm-4-airx', label: 'glm-4-airx · 低价加速', tier: 'fast', note: '低价加速，响应快' },
+    { id: 'glm-4-plus', label: 'glm-4-plus · 标准价', tier: 'plus', note: '更强创意，适合精写' },
+    { id: 'glm-4-long', label: 'glm-4-long · 长文本', tier: 'standard', note: '长文本专用' },
   ],
   deepseek: [
-    { id: 'deepseek-chat', label: 'deepseek-chat · 标准价（默认）' },
-    { id: 'deepseek-reasoner', label: 'deepseek-reasoner · 推理模型，稍贵' },
+    { id: 'deepseek-chat', label: 'deepseek-chat · 标准价（默认）', tier: 'standard', note: '均衡之选，文案质量佳' },
+    { id: 'deepseek-reasoner', label: 'deepseek-reasoner · 推理模型，稍贵', tier: 'flagship', note: '深度思考，最强质量' },
   ],
   hunyuan: [
-    { id: 'hunyuan-lite', label: 'hunyuan-lite · 免费额度（默认）' },
-    { id: 'hunyuan-standard', label: 'hunyuan-standard · 标准价' },
-    { id: 'hunyuan-pro', label: 'hunyuan-pro · 旗舰价' },
+    { id: 'hunyuan-lite', label: 'hunyuan-lite · 免费额度（默认）', tier: 'fast', note: '免费额度，速度快' },
+    { id: 'hunyuan-standard', label: 'hunyuan-standard · 标准价', tier: 'standard', note: '均衡之选，文案质量佳' },
+    { id: 'hunyuan-pro', label: 'hunyuan-pro · 旗舰价', tier: 'flagship', note: '最强质量，速度稍慢' },
   ],
   doubao: [
-    { id: 'doubao-lite-4k', label: 'doubao-lite-4k · 低价（默认，可填接入点ID）' },
-    { id: 'doubao-lite-32k', label: 'doubao-lite-32k · 低价长文本' },
-    { id: 'doubao-pro-4k', label: 'doubao-pro-4k · 标准价' },
-    { id: 'doubao-pro-32k', label: 'doubao-pro-32k · 标准价长文本' },
+    { id: 'doubao-lite-4k', label: 'doubao-lite-4k · 低价（默认，可填接入点ID）', tier: 'fast', note: '速度快，适合日常生成' },
+    { id: 'doubao-lite-32k', label: 'doubao-lite-32k · 低价长文本', tier: 'fast', note: '低价长文本' },
+    { id: 'doubao-pro-4k', label: 'doubao-pro-4k · 标准价', tier: 'standard', note: '均衡之选，文案质量佳' },
+    { id: 'doubao-pro-32k', label: 'doubao-pro-32k · 标准价长文本', tier: 'plus', note: '标准价长文本' },
   ],
   siliconflow: [
-    { id: 'Qwen/Qwen2.5-7B-Instruct', label: 'Qwen2.5-7B · 免费额度（默认）' },
-    { id: 'Qwen/Qwen2.5-72B-Instruct', label: 'Qwen2.5-72B · 标准价，能力强' },
-    { id: 'deepseek-ai/DeepSeek-V3', label: 'DeepSeek-V3 · 标准价' },
-    { id: 'THUDM/glm-4-9b-chat', label: 'glm-4-9b · 免费额度' },
+    { id: 'Qwen/Qwen2.5-7B-Instruct', label: 'Qwen2.5-7B · 免费额度（默认）', tier: 'fast', note: '免费额度，速度快' },
+    { id: 'THUDM/glm-4-9b-chat', label: 'glm-4-9b · 免费额度', tier: 'fast', note: '免费额度，速度快' },
+    { id: 'Qwen/Qwen2.5-72B-Instruct', label: 'Qwen2.5-72B · 标准价，能力强', tier: 'plus', note: '更强创意，适合精写' },
+    { id: 'deepseek-ai/DeepSeek-V3', label: 'DeepSeek-V3 · 标准价', tier: 'plus', note: '更强创意，适合精写' },
   ],
 };
 
@@ -114,28 +138,36 @@ export interface ResolvedProvider {
   apiKey: string;
 }
 
-/** 解析单个提供商的完整配置（Key 为空返回 null） */
-function resolveOne(key: ProviderKey): ResolvedProvider | null {
+/** 解析单个提供商的完整配置（Key 为空返回 null）；指定 model 时校验白名单 */
+function resolveOne(key: ProviderKey, model?: string): ResolvedProvider | null {
   const def = PROVIDERS[key];
   if (!def) return null;
   const keyFromDb = getSystemConfig(`ai_key_${def.key}`);
   const apiKey = keyFromDb || process.env[def.envKey] || '';
   if (!apiKey) return null;
   const baseURL = (def.envBaseURL && process.env[def.envBaseURL]) || def.baseURL;
-  const model = (def.envModel && process.env[def.envModel]) || getSystemConfig(`ai_model_${def.key}`) || def.model;
-  return { key: def.key, label: def.label, baseURL, model, apiKey };
+  // 用户指定模型必须在目录白名单内；未指定走后台配置/默认
+  let resolvedModel: string;
+  if (model) {
+    if (!MODEL_CATALOG[key].some((m) => m.id === model)) return null;
+    resolvedModel = model;
+  } else {
+    resolvedModel = (def.envModel && process.env[def.envModel]) || getSystemConfig(`ai_model_${def.key}`) || def.model;
+  }
+  return { key: def.key, label: def.label, baseURL, model: resolvedModel, apiKey };
 }
 
 /**
  * 解析当前生效的提供商配置（system_config 优先，环境变量兜底）
  * 若首选提供商未配置 Key，自动回退到第一个已配置 Key 的提供商
+ * 指定 model 时校验是否在该提供商目录白名单内（防注入任意模型刷高价接口）
  */
-export function resolveProvider(preferred?: ProviderKey): ResolvedProvider | null {
+export function resolveProvider(preferred?: ProviderKey, model?: string): ResolvedProvider | null {
   const wanted = (preferred || (getSystemConfig('default_provider') as ProviderKey | null)) || 'qwen';
-  const first = resolveOne(wanted);
+  const first = resolveOne(wanted, model);
   if (first) return first;
 
-  // 回退：按固定顺序找第一个已配置 Key 的提供商
+  // 回退：按固定顺序找第一个已配置 Key 的提供商（回退时不保留用户指定模型）
   for (const k of PROVIDER_KEYS) {
     const fallback = resolveOne(k);
     if (fallback) return fallback;
@@ -161,6 +193,59 @@ export function listProviders() {
       configuredFrom: keyFromDb ? '后台配置' : (process.env[def.envKey] ? '环境变量' : '未配置'),
     };
   });
+}
+
+/** 档位开放级别（管理后台可收窄用户可选范围） */
+export type TierAccess = 'all' | 'standard' | 'plus';
+
+const TIER_ORDER: ModelTier[] = ['fast', 'standard', 'plus', 'flagship'];
+
+/** 读取后台配置的开放档位：all=全开 / standard=到标准版 / plus=到高质量版 */
+export function getTierAccess(): TierAccess {
+  const v = getSystemConfig('tier_access');
+  if (v === 'standard' || v === 'plus') return v;
+  return 'all';
+}
+
+function tierAllowed(tier: ModelTier, access: TierAccess): boolean {
+  const limit = access === 'standard' ? 1 : access === 'plus' ? 2 : 3; // TIER_ORDER 下标上限
+  return TIER_ORDER.indexOf(tier) <= limit;
+}
+
+/**
+ * 用户端可选模型列表（只返回已配置 Key 的服务商，不暴露 Key）：
+ * 自动附「自动匹配」由前端渲染；此处返回各服务商模型（含档位/成本/说明）
+ */
+export function listUserModels() {
+  const access = getTierAccess();
+  const defaultProvider = (getSystemConfig('default_provider') as ProviderKey | null) || 'qwen';
+  const providers = PROVIDER_KEYS.filter((k) => {
+    const def = PROVIDERS[k];
+    return !!(getSystemConfig(`ai_key_${def.key}`) || process.env[def.envKey]);
+  });
+  return {
+    tierAccess: access,
+    defaultProvider,
+    providers: providers.map((k) => ({
+      key: k,
+      label: PROVIDERS[k].label,
+      models: MODEL_CATALOG[k]
+        .filter((m) => tierAllowed(m.tier, access))
+        .map((m) => ({
+          id: m.id,
+          tier: m.tier,
+          tierLabel: `${TIER_META[m.tier].icon} ${TIER_META[m.tier].label}`,
+          cost: TIER_META[m.tier].cost,
+          note: m.note,
+        })),
+    })),
+  };
+}
+
+/** 查询某提供商某模型的扣次成本（白名单外返回 1，用于兜底） */
+export function getModelCost(provider: ProviderKey, model: string): number {
+  const m = MODEL_CATALOG[provider]?.find((x) => x.id === model);
+  return m ? TIER_META[m.tier].cost : 1;
 }
 
 export interface ChatMessage {
@@ -205,6 +290,7 @@ export interface CallAIOptions {
   timeoutMs?: number;   // 单次超时，默认 30s
   maxRetries?: number;  // 超时/5xx 自动重试次数，默认 2 次
   preferred?: ProviderKey;
+  model?: string;       // 用户指定的模型 ID（必须在 preferred 提供商目录白名单内）
 }
 
 export interface CallAIResult {
@@ -220,7 +306,7 @@ export interface CallAIResult {
  * - 最终失败返回 ok:false，调用方统一给用户「AI服务繁忙」降级提示
  */
 export async function callAI(options: CallAIOptions): Promise<CallAIResult> {
-  const provider = resolveProvider(options.preferred);
+  const provider = resolveProvider(options.preferred, options.model);
   if (!provider) {
     return { ok: false, content: '', provider: '-', error: 'AI_PROVIDER_NOT_CONFIGURED' };
   }

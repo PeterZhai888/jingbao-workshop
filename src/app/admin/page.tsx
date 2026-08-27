@@ -706,6 +706,7 @@ interface ConfigData {
   defaultProvider: string;
   dailyLimit: number;
   qpsLimit: number;
+  tierAccess: string;
 }
 
 // 模型选择器：预设下拉（含价格档位）+ 自定义输入兜底
@@ -882,6 +883,7 @@ function ConfigPanel({ token }: { token: string }) {
           default_provider: config.defaultProvider,
           daily_limit: String(config.dailyLimit),
           qps_limit: String(config.qpsLimit),
+          tier_access: config.tierAccess || 'all',
         }),
       });
       const data = await res.json();
@@ -975,6 +977,20 @@ function ConfigPanel({ token }: { token: string }) {
                 value={config!.qpsLimit}
                 onChange={(e) => setConfig({ ...config!, qpsLimit: parseInt(e.target.value, 10) || 10 })}
               />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">用户端开放档位</label>
+              <Select value={config!.tierAccess || 'all'} onValueChange={(v) => setConfig({ ...config!, tierAccess: v })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部档位（含👑旗舰版·3次）</SelectItem>
+                  <SelectItem value="plus">到💎高质量版（2次）</SelectItem>
+                  <SelectItem value="standard">到💎标准版（1次）</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">收窄后用户端模型选择器将隐藏更高档位</p>
             </div>
           </div>
           <Button onClick={handleSave} disabled={saving} className="gap-1.5">

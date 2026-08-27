@@ -5,7 +5,8 @@ import {
   touchCardUsage,
   saveGeneratedHistory,
 } from '@/lib/server/card-service';
-import { callAI, extractJSON } from '@/lib/server/ai-provider';
+import { callAI, extractJSON, PROVIDER_KEYS, getModelCost } from '@/lib/server/ai-provider';
+import type { ProviderKey } from '@/lib/server/ai-provider';
 
 // 爆款标题生成的系统 Prompt：一次输出 10 组（支持短主题或完整文案）
 const SYSTEM_PROMPT = `你是顶级短视频爆款标题专家，深谙抖音、快手、B站、小红书的爆款逻辑。
@@ -64,7 +65,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  let body: { topic?: string } = {};
+  let body: { topic?: string; provider?: string; model?: string } = {};
   try {
     body = await request.json();
   } catch {
@@ -90,12 +91,37 @@ export async function POST(request: NextRequest) {
   }
 
   // ========= 调用真实 LLM =========
+  // 用户指定的 provider/model 需在白名单内（非法值直接忽略走默认）
+  const preferred = PROVIDER_KEYS.includes(body.provider as ProviderKey) ? (body.provider as ProviderKey) : undefined;
+  const model = typeof body.model === 'string' ? body.model : undefined;
+  // 本次消耗次数（按模型档位成本加权）
+  const cost = preferred && model ? getModelCost(preferred, model) : 1;
+  // 次数检查（含本次成本）
+  if (dailyUsed! + cost > dailyLimit!) {
+    writeUsageLog({
+      cardId: cardId!,
+      cardCode: cardCode!,
+      action: 'titles',
+      success: false,
+      ip,
+      userAgent,
+      fingerprint,
+      detail: 'DAILY_LIMIT',
+    });
+    return NextResponse.json(
+      { success: false, code: 'DAILY_LIMIT', error: `今日剩余次数不足以完成本次生成（需${cost}次），请更换低档位模型或明天再来` },
+      { status: 429 },
+    );
+  }
+
   const ai = await callAI({
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: `视频主题或完整文案：\n${topic}` },
     ],
     timeoutMs: 30_000,
+    preferred,
+    model,
   });
 
   if (!ai.ok) {
@@ -166,7 +192,7 @@ export async function POST(request: NextRequest) {
     ip,
     userAgent,
     fingerprint,
-    detail: { topicLen: topic.length, titlesCount: titles.length, provider: ai.provider },
+    detail: { topicLen: topic.length, titlesCount: titles.length, provider: ai.provider, cost },
   });
 
   saveGeneratedHistory({
@@ -180,5 +206,5 @@ export async function POST(request: NextRequest) {
 
   touchCardUsage(cardId!, ip!, fingerprint!);
 
-  return NextResponse.json({ success: true, id, titles, provider: ai.provider });
+  return NextResponse.json({ success: true, id, titles, provider: ai.provider, cost });
 }

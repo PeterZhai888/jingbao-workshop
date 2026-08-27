@@ -19,6 +19,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { ModelSelector, type ModelSelection } from '@/components/model-selector';
 import type { StoryboardShot, StoryboardResult } from '@/lib/types';
 import {
   Table,
@@ -54,6 +55,7 @@ export function StoryboardTool() {
   const [result, setResult] = useState<StoryboardShot[] | null>(null);
   const [resultMeta, setResultMeta] = useState<{ id: string; title: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [model, setModel] = useState<ModelSelection>({ cost: 1 });
 
   // 自定义输入的合法值（3-15 整数）
   const customParsed = parseInt(customInput, 10);
@@ -78,8 +80,8 @@ export function StoryboardTool() {
       toast.error('请输入视频文案或故事文本');
       return;
     }
-    if (session && session.dailyUsed >= session.dailyLimit) {
-      toast.error('今日次数已用完，请明天再来哦');
+    if (session && session.dailyUsed + model.cost > session.dailyLimit) {
+      toast.error(session.dailyUsed >= session.dailyLimit ? '今日次数已用完，请明天再来哦' : `剩余次数不足（本次需消耗${model.cost}次），请更换低档位模型`);
       return;
     }
     setLoading(true);
@@ -97,7 +99,7 @@ export function StoryboardTool() {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${session?.token}`,
           },
-          body: JSON.stringify({ text: inputText, count: effectiveCount }),
+          body: JSON.stringify({ text: inputText, count: effectiveCount, provider: model.provider, model: model.model }),
         });
         const data = await res.json();
         if (!res.ok || !data.success) {
@@ -196,6 +198,9 @@ export function StoryboardTool() {
             <CardDescription>建议 100-2000 字，描述越清楚分镜越精准</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
+              <ModelSelector value={model} onChange={setModel} />
+            </div>
             <Textarea
               placeholder="例如：&#10;&#10;周末早晨，我决定给自己做一杯手冲咖啡。窗外阳光正好，咖啡豆的香气弥漫整个房间。慢下来，感受生活中的小确幸..."
               value={inputText}
@@ -284,7 +289,7 @@ export function StoryboardTool() {
                 ) : (
                   <>
                     <Sparkles className="h-4 w-4" />
-                    生成分镜
+                    生成分镜{model.cost > 1 ? `（耗${model.cost}次）` : ''}
                   </>
                 )}
               </Button>

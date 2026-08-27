@@ -17,6 +17,7 @@ import {
   Lightbulb,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { ModelSelector, type ModelSelection } from '@/components/model-selector';
 
 const MOCK_TITLES = [
   '闺蜜以为我去了巴黎！其实就在这家藏在弄堂里的小店…',
@@ -56,14 +57,15 @@ export function TitlesTool() {
   const [titles, setTitles] = useState<string[] | null>(null);
   const [meta, setMeta] = useState<{ id: string; topic: string } | null>(null);
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
+  const [model, setModel] = useState<ModelSelection>({ cost: 1 });
 
   const handleGenerate = async (useMock = false) => {
     if (!topic.trim()) {
       toast.error('请输入视频主题或核心内容');
       return;
     }
-    if (session && session.dailyUsed >= session.dailyLimit) {
-      toast.error('今日次数已用完，请明天再来哦');
+    if (session && session.dailyUsed + model.cost > session.dailyLimit) {
+      toast.error(session.dailyUsed >= session.dailyLimit ? '今日次数已用完，请明天再来哦' : `剩余次数不足（本次需消耗${model.cost}次），请更换低档位模型`);
       return;
     }
     setLoading(true);
@@ -80,7 +82,7 @@ export function TitlesTool() {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${session?.token}`,
           },
-          body: JSON.stringify({ topic }),
+          body: JSON.stringify({ topic, provider: model.provider, model: model.model }),
         });
         const data = await res.json();
         if (!res.ok || !data.success) {
@@ -151,6 +153,9 @@ export function TitlesTool() {
           <CardDescription>支持两种方式：输入简短主题，或直接粘贴完整口播稿/文案（AI 自动提炼核心内容）</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
+            <ModelSelector value={model} onChange={setModel} />
+          </div>
           <div className="space-y-2">
             <Textarea
               placeholder={'例如：&#10;&#10;平价手冲咖啡教程、独居女生快手早餐...&#10;&#10;或直接粘贴完整口播稿，AI 会自动提炼要点生成标题'}
@@ -180,7 +185,7 @@ export function TitlesTool() {
               ) : (
                 <>
                   <Sparkles className="h-4 w-4" />
-                  生成 10 组标题
+                  生成 10 组标题{model.cost > 1 ? `（耗${model.cost}次）` : ''}
                 </>
               )}
             </Button>

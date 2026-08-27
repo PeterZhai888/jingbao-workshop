@@ -5,7 +5,8 @@ import {
   touchCardUsage,
   saveGeneratedHistory,
 } from '@/lib/server/card-service';
-import { callAI, extractJSON } from '@/lib/server/ai-provider';
+import { callAI, extractJSON, PROVIDER_KEYS, getModelCost } from '@/lib/server/ai-provider';
+import type { ProviderKey } from '@/lib/server/ai-provider';
 import type { StoryboardShot } from '@/lib/types';
 
 // 分镜生成的系统 Prompt：要求输出严格 JSON（镜头数量由用户指定）
@@ -63,7 +64,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  let body: { text?: string; count?: number } = {};
+  let body: { text?: string; count?: number; provider?: string; model?: string } = {};
   try {
     body = await request.json();
   } catch {
@@ -94,12 +95,37 @@ export async function POST(request: NextRequest) {
   }
 
   // ========= 调用真实 LLM =========
+  // 用户指定的 provider/model 需在白名单内（非法值直接忽略走默认）
+  const preferred = PROVIDER_KEYS.includes(body.provider as ProviderKey) ? (body.provider as ProviderKey) : undefined;
+  const model = typeof body.model === 'string' ? body.model : undefined;
+  // 本次消耗次数（按模型档位成本加权）
+  const cost = preferred && model ? getModelCost(preferred, model) : 1;
+  // 次数检查（含本次成本：剩余次数不足以覆盖本次消耗时拦截）
+  if (dailyUsed! + cost > dailyLimit!) {
+    writeUsageLog({
+      cardId: cardId!,
+      cardCode: cardCode!,
+      action: 'storyboard',
+      success: false,
+      ip,
+      userAgent,
+      fingerprint,
+      detail: 'DAILY_LIMIT',
+    });
+    return NextResponse.json(
+      { success: false, code: 'DAILY_LIMIT', error: `今日剩余次数不足以完成本次生成（需${cost}次），请更换低档位模型或明天再来` },
+      { status: 429 },
+    );
+  }
+
   const ai = await callAI({
     messages: [
       { role: 'system', content: buildSystemPrompt(count) },
       { role: 'user', content: `视频文案：\n${text}` },
     ],
     timeoutMs: 45_000, // 分镜生成内容较长，放宽到 45 秒
+    preferred,
+    model,
   });
 
   // AI 失败 → 降级提示，不扣次数、不写成功日志
@@ -170,7 +196,7 @@ export async function POST(request: NextRequest) {
     ip,
     userAgent,
     fingerprint,
-    detail: { inputLen: text.length, shotsCount: shots.length, provider: ai.provider },
+    detail: { inputLen: text.length, shotsCount: shots.length, provider: ai.provider, cost },
   });
 
   // 写生成历史
@@ -191,5 +217,6 @@ export async function POST(request: NextRequest) {
     title,
     shots,
     provider: ai.provider,
+    cost,
   });
 }
