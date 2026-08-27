@@ -64,8 +64,8 @@ export default function HomePage() {
     },
     {
       icon: Shield,
-      title: '卡密订阅制',
-      desc: '无需注册登录，输入卡密即用，9.9元/月，每天20次AI生成，性价比拉满。',
+      title: '卡密激活即用',
+      desc: '无需注册登录、无需绑定手机，输入卡密直接使用，操作简单、隐私安全。',
       color: 'from-emerald-500 to-teal-500',
     },
   ];
@@ -112,7 +112,7 @@ export default function HomePage() {
                 <a href="#card-input">
                   <Button size="lg" className="gap-2 w-full sm:w-auto shadow-lg shadow-primary/20">
                     <Rocket className="h-5 w-5" />
-                    立即激活 · 9.9元/月
+                    输入卡密激活
                   </Button>
                 </a>
                 <a href="#features">
@@ -193,32 +193,28 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Pricing + Card Input */}
+      {/* Activation + Benefits */}
       <section id="card-input" className="scroll-mt-20">
         <div className="text-center mb-10">
-          <h2 className="text-2xl sm:text-3xl font-bold">订阅激活，即用即走</h2>
+          <h2 className="text-2xl sm:text-3xl font-bold">卡密激活，即用即走</h2>
           <p className="mt-3 text-muted-foreground">无需注册 · 无需绑手机 · 隐私安全</p>
         </div>
 
         <div className="grid lg:grid-cols-5 gap-6 max-w-5xl mx-auto">
-          {/* Pricing */}
+          {/* Benefits */}
           <Card className="lg:col-span-2 border-primary/30 bg-gradient-to-br from-primary/5 via-white to-white relative overflow-hidden">
             <div className="absolute -top-16 -right-16 h-40 w-40 rounded-full bg-primary/10 blur-3xl"></div>
             <CardHeader>
-              <Badge className="w-fit bg-primary text-primary-foreground hover:bg-primary">推荐</Badge>
-              <CardTitle className="mt-2 text-xl">月度会员</CardTitle>
-              <div className="mt-2 flex items-baseline gap-1">
-                <span className="text-4xl font-bold text-primary">¥9.9</span>
-                <span className="text-muted-foreground">/月</span>
-              </div>
+              <Badge className="w-fit bg-primary text-primary-foreground hover:bg-primary">会员权益</Badge>
+              <CardTitle className="mt-2 text-xl">激活后享受以下权益</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               {[
-                '文本转分镜脚本：每日20次',
-                'AI爆款标题生成：每日20次',
-                '云端历史记录：随时回看',
-                '多模型切换（通义/智谱/Deepseek）',
-                '30天有效 · 不自动续费',
+                '文本转分镜脚本 · 每日充足额度',
+                'AI爆款标题生成 · 每日充足额度',
+                '云端历史记录 · 随时回看复用',
+                '多模型切换 · 通义/智谱/Deepseek等',
+                '激活后30天内有效',
               ].map((item) => (
                 <div key={item} className="flex items-start gap-2 text-sm">
                   <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
@@ -227,7 +223,7 @@ export default function HomePage() {
               ))}
               <div className="mt-4 rounded-lg bg-slate-50 p-3 text-xs text-muted-foreground border border-border/60 flex gap-2 items-start">
                 <Clock className="h-4 w-4 mt-0.5 shrink-0" />
-                <span>激活后30天内有效，每日额度UTC+8 0点自动重置</span>
+                <span>每日额度每天 0 点自动重置，有效期内均可使用</span>
               </div>
             </CardContent>
           </Card>
@@ -303,9 +299,9 @@ export default function HomePage() {
                   <div className="rounded-lg bg-slate-50 border border-border/60 p-4 text-sm text-muted-foreground">
                     <div className="font-semibold text-foreground mb-2">💡 如何获取卡密？</div>
                     <ol className="list-decimal list-inside space-y-1 text-xs leading-relaxed">
-                      <li>在私域（小红书/微信）联系客服转账 9.9 元</li>
-                      <li>客服在管理后台生成 30 天卡密</li>
-                      <li>收到卡密后在上方输入框粘贴激活</li>
+                      <li>在私域（小红书/微信）联系客服获取卡密</li>
+                      <li>客服通过管理后台生成专属 30 天卡密</li>
+                      <li>收到卡密后在上方输入框粘贴激活即可</li>
                     </ol>
                   </div>
                 </>

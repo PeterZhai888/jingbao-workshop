@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'AI短视频工具箱 | 一键生成爆款脚本与标题',
     description:
-      '文本转专业分镜脚本、AI爆款标题生成。9.9元/月，每日20次AI生成额度。',
+      '文本转专业分镜脚本、AI爆款标题生成。无需注册，输入卡密即可使用。',
     locale: 'zh_CN',
     type: 'website',
   },
