@@ -8,10 +8,11 @@ import {
 import { callAI, extractJSON } from '@/lib/server/ai-provider';
 import type { StoryboardShot } from '@/lib/types';
 
-// 分镜生成的系统 Prompt：要求输出严格 JSON
-const SYSTEM_PROMPT = `你是专业的短视频分镜编剧。根据用户的视频文案，输出一份分镜脚本。
+// 分镜生成的系统 Prompt：要求输出严格 JSON（镜头数量由用户指定）
+function buildSystemPrompt(count: number): string {
+  return `你是专业的短视频分镜编剧。根据用户的视频文案，输出一份分镜脚本。
 要求：
-1. 输出 5-8 个镜头（文案长可适当增加，最多不超过 12 个）。
+1. 输出恰好 ${count} 个镜头，不多不少。
 2. 严格只输出 JSON 数组，不要任何解释文字、不要 markdown 代码块之外的说明。
 3. 每个镜头包含以下字段：
    - shotNumber: 镜头序号（从 1 开始的整数）
@@ -22,6 +23,7 @@ const SYSTEM_PROMPT = `你是专业的短视频分镜编剧。根据用户的视
 4. 分镜节奏要适配抖音/快手/视频号竖屏短视频，前 3 秒必须抓住观众。
 示例输出格式：
 [{"shotNumber":1,"sceneDescription":"...","dialogue":"旁白：...","duration":"3秒","cameraMove":"固定机位"}]`;
+}
 
 // 降级用的通用分镜模板（AI 失败时不扣次数，直接返回结构化提示）
 function fallbackShots(text: string): StoryboardShot[] {
@@ -61,7 +63,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  let body: { text?: string } = {};
+  let body: { text?: string; count?: number } = {};
   try {
     body = await request.json();
   } catch {
@@ -70,6 +72,10 @@ export async function POST(request: NextRequest) {
   const text = (body.text || '').trim();
   if (!text) return NextResponse.json({ success: false, error: '缺少输入文本' }, { status: 400 });
   if (text.length > 5000) return NextResponse.json({ success: false, error: '文本过长，请精简到5000字以内' }, { status: 400 });
+
+  // 分镜数量：3-15 任意整数，默认 10
+  const parsedCount = parseInt(String(body.count ?? 10), 10);
+  const count = Number.isFinite(parsedCount) ? Math.min(Math.max(parsedCount, 3), 15) : 10;
 
   // 敏感词过滤
   const sens = checkSensitive(text);
@@ -90,7 +96,7 @@ export async function POST(request: NextRequest) {
   // ========= 调用真实 LLM =========
   const ai = await callAI({
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: buildSystemPrompt(count) },
       { role: 'user', content: `视频文案：\n${text}` },
     ],
     timeoutMs: 45_000, // 分镜生成内容较长，放宽到 45 秒
@@ -144,7 +150,7 @@ export async function POST(request: NextRequest) {
   }
 
   // 规范化镜头数据（序号重排 + 字段兜底）
-  const shots: StoryboardShot[] = parsed.slice(0, 12).map((s, i) => ({
+  const shots: StoryboardShot[] = parsed.slice(0, 15).map((s, i) => ({
     shotNumber: typeof s.shotNumber === 'number' ? s.shotNumber : i + 1,
     sceneDescription: String(s.sceneDescription || ''),
     dialogue: String(s.dialogue || ''),

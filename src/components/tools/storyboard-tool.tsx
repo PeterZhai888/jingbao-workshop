@@ -47,10 +47,31 @@ const MOCK_SHOTS: StoryboardShot[] = [
 export function StoryboardTool() {
   const { session, refreshUsage } = useCardAuth();
   const [inputText, setInputText] = useState('');
+  const [shotCount, setShotCount] = useState(10); // 分镜数量 3-15，默认 10
+  const [customMode, setCustomMode] = useState(false);
+  const [customInput, setCustomInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<StoryboardShot[] | null>(null);
   const [resultMeta, setResultMeta] = useState<{ id: string; title: string } | null>(null);
   const [copied, setCopied] = useState(false);
+
+  // 自定义输入的合法值（3-15 整数）
+  const customParsed = parseInt(customInput, 10);
+  const customValid = Number.isFinite(customParsed) && customParsed >= 3 && customParsed <= 15;
+  const effectiveCount = customMode ? (customValid ? customParsed : shotCount) : shotCount;
+
+  const applyPreset = (n: number) => {
+    setShotCount(n);
+    setCustomMode(false);
+  };
+
+  const applyCustom = () => {
+    if (customValid) {
+      setShotCount(customParsed);
+      setCustomMode(false);
+      setCustomInput('');
+    }
+  };
 
   const handleGenerate = async (useMock = false) => {
     if (!inputText.trim()) {
@@ -76,7 +97,7 @@ export function StoryboardTool() {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${session?.token}`,
           },
-          body: JSON.stringify({ text: inputText }),
+          body: JSON.stringify({ text: inputText, count: effectiveCount }),
         });
         const data = await res.json();
         if (!res.ok || !data.success) {
@@ -183,6 +204,70 @@ export function StoryboardTool() {
               <span>{inputText.length} 字</span>
               <span>建议 100-2000 字</span>
             </div>
+
+            {/* 分镜数量选择：快捷档位 + 自定义 */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">分镜数量</label>
+                <span className="text-xs text-primary font-medium">将生成 {effectiveCount} 条</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {[3, 5, 10, 15].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => applyPreset(n)}
+                    className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                      !customMode && shotCount === n
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'border border-border text-muted-foreground hover:border-primary/40 hover:text-primary'
+                    }`}
+                  >
+                    {n} 条
+                  </button>
+                ))}
+                {!customMode ? (
+                  <button
+                    type="button"
+                    onClick={() => setCustomMode(true)}
+                    className="rounded-lg px-3 py-1.5 text-sm text-muted-foreground border border-border hover:border-primary/40 hover:text-primary transition-colors"
+                  >
+                    自定义
+                  </button>
+                ) : (
+                  <span className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      min={3}
+                      max={15}
+                      value={customInput}
+                      onChange={(e) => setCustomInput(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && applyCustom()}
+                      placeholder="3-15"
+                      className="w-20 h-9 rounded-lg border border-border px-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={applyCustom}
+                      disabled={!customValid}
+                      className="h-9"
+                    >
+                      确定
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={() => { setCustomMode(false); setCustomInput(''); }}
+                      className="text-xs text-muted-foreground hover:text-foreground px-1"
+                    >
+                      取消
+                    </button>
+                  </span>
+                )}
+              </div>
+            </div>
+
             <div className="flex flex-col sm:flex-row gap-2">
               <Button
                 onClick={() => handleGenerate(false)}
