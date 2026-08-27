@@ -16,6 +16,16 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   Table,
   TableBody,
   TableCell,
@@ -53,6 +63,7 @@ import {
   PlayCircle,
   KeyRound,
   Cpu,
+  Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -244,6 +255,8 @@ function CardsPanel({ token }: { token: string }) {
   const [genDailyLimit, setGenDailyLimit] = useState('20');
   const [genRemark, setGenRemark] = useState('');
   const [genLoading, setGenLoading] = useState(false);
+  // 删除确认弹窗（待删的 unused 卡密列表）
+  const [deleteTarget, setDeleteTarget] = useState<string[] | null>(null);
 
   const pageSize = 15;
 
@@ -285,6 +298,27 @@ function CardsPanel({ token }: { token: string }) {
         load();
       } else {
         toast.error(data.error || '操作失败');
+      }
+    } catch {
+      toast.error('网络错误');
+    }
+  };
+
+  // 删除卡密（仅 unused 未激活卡密可物理删除）
+  const handleDeleteCards = async (codes: string[]) => {
+    if (codes.length === 0) return;
+    try {
+      const res = await fetch('/api/admin/cards', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', ...withAuth(token) },
+        body: JSON.stringify({ codes }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(data.message || `已删除 ${data.deleted} 张卡密`);
+        load();
+      } else {
+        toast.error(data.error || '删除失败');
       }
     } catch {
       toast.error('网络错误');
@@ -367,6 +401,16 @@ function CardsPanel({ token }: { token: string }) {
         <Button onClick={() => setGenOpen(true)} className="gap-1.5 ml-auto">
           <Plus className="h-4 w-4" /> 批量生成卡密
         </Button>
+        {rows.some((c) => c.status === 'unused') && (
+          <Button
+            variant="outline"
+            className="gap-1.5 text-destructive hover:text-destructive"
+            onClick={() => setDeleteTarget(rows.filter((c) => c.status === 'unused').map((c) => c.code))}
+            title="删除当前页全部未激活卡密"
+          >
+            <Trash2 className="h-4 w-4" /> 删除本页未激活
+          </Button>
+        )}
       </div>
 
       {/* 表格 */}
@@ -436,6 +480,11 @@ function CardsPanel({ token }: { token: string }) {
                           <PlayCircle className="h-4 w-4" />
                         </Button>
                       )}
+                      {c.status === 'unused' && (
+                        <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" title="删除（仅未激活卡密可删除）" onClick={() => setDeleteTarget([c.code])}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -457,6 +506,31 @@ function CardsPanel({ token }: { token: string }) {
           </Button>
         </div>
       </div>
+
+      {/* 删除确认弹窗 */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除 {deleteTarget?.length} 张卡密？</AlertDialogTitle>
+            <AlertDialogDescription>
+              仅未激活卡密会被物理删除，删除后不可恢复。已激活/冻结/作废的卡密不会受影响（请使用冻结/作废管理）。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
+              onClick={() => {
+                const codes = deleteTarget;
+                setDeleteTarget(null);
+                if (codes) handleDeleteCards(codes);
+              }}
+            >
+              确认删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* 生成弹窗 */}
       <Dialog open={genOpen} onOpenChange={(open) => { setGenOpen(open); if (!open) { setGenResult(null); setGenCopied(false); } }}>
@@ -565,6 +639,8 @@ function LogsPanel({ token }: { token: string }) {
   const [searchCode, setSearchCode] = useState('');
   const [filterAction, setFilterAction] = useState('all');
   const [loading, setLoading] = useState(true);
+  // 日志清理确认弹窗：null 关闭 / 0 清空全部 / N 保留最近 N 天
+  const [cleanTarget, setCleanTarget] = useState<number | null>(null);
 
   const pageSize = 20;
 
@@ -593,6 +669,24 @@ function LogsPanel({ token }: { token: string }) {
 
   const totalPages = Math.max(Math.ceil(total / pageSize), 1);
 
+  // 清理日志（0=清空全部 / N=保留最近 N 天）
+  const handleClean = async (keepDays: number) => {
+    try {
+      const url = keepDays > 0 ? `/api/admin/logs?keepDays=${keepDays}` : '/api/admin/logs';
+      const res = await fetch(url, { method: 'DELETE', headers: withAuth(token) });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`已清理 ${data.deleted} 条日志`);
+        setPage(1);
+        load();
+      } else {
+        toast.error(data.error || '清理失败');
+      }
+    } catch {
+      toast.error('网络错误');
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row gap-2">
@@ -620,6 +714,24 @@ function LogsPanel({ token }: { token: string }) {
         </Select>
         <Button variant="outline" size="sm" className="gap-1.5 ml-auto self-start" onClick={load}>
           <RefreshCw className="h-4 w-4" /> 刷新
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5 text-destructive hover:text-destructive self-start"
+          onClick={() => setCleanTarget(30)}
+          title="保留最近30天日志，清理更早的"
+        >
+          <Trash2 className="h-4 w-4" /> 清理30天前
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5 text-destructive hover:text-destructive self-start"
+          onClick={() => setCleanTarget(0)}
+          disabled={total === 0}
+        >
+          <Trash2 className="h-4 w-4" /> 清空全部
         </Button>
       </div>
 
@@ -681,6 +793,35 @@ function LogsPanel({ token }: { token: string }) {
           </Button>
         </div>
       </div>
+
+      {/* 清理确认弹窗 */}
+      <AlertDialog open={cleanTarget !== null} onOpenChange={(open) => { if (!open) setCleanTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {cleanTarget === 0 ? '确认清空全部日志？' : `确认清理 ${cleanTarget} 天前的日志？`}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {cleanTarget === 0
+                ? `将删除全部 ${total} 条使用日志，删除后不可恢复。`
+                : `将删除 ${cleanTarget} 天前的使用日志（保留最近 ${cleanTarget} 天），删除后不可恢复。`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
+              onClick={() => {
+                const keepDays = cleanTarget;
+                setCleanTarget(null);
+                if (keepDays !== null) handleClean(keepDays);
+              }}
+            >
+              确认清理
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -851,6 +992,8 @@ function ConfigPanel({ token }: { token: string }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [keyDrafts, setKeyDrafts] = useState<Record<string, string>>({});
+  // 清除配置确认弹窗（待清除的服务商）
+  const [clearTarget, setClearTarget] = useState<ProviderInfo | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -918,6 +1061,27 @@ function ConfigPanel({ token }: { token: string }) {
         load();
       } else {
         toast.error(data.error || '保存失败');
+      }
+    } catch {
+      toast.error('网络错误');
+    }
+  };
+
+  // 清除某家服务商的全部配置（Key + 模型覆盖），即停用该服务商
+  const handleClearProvider = async (provider: ProviderInfo) => {
+    try {
+      const res = await fetch('/api/admin/config', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ provider: provider.key }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`${provider.label} 配置已清除（已停用）`);
+        setKeyDrafts((d) => ({ ...d, [provider.key]: '' }));
+        load();
+      } else {
+        toast.error(data.error || '操作失败');
       }
     } catch {
       toast.error('网络错误');
@@ -1025,6 +1189,17 @@ function ConfigPanel({ token }: { token: string }) {
                   </Badge>
                 )}
                 <span className="text-xs text-muted-foreground ml-auto font-mono">当前模型：{p.currentModel}</span>
+                {p.configuredFrom === '后台配置' && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                    onClick={() => setClearTarget(p)}
+                    title="清除该服务商的 Key 与模型配置（即停用）"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" /> 清除配置
+                  </Button>
+                )}
               </div>
               <div className="flex gap-2 mb-2">
                 <Input
@@ -1042,6 +1217,35 @@ function ConfigPanel({ token }: { token: string }) {
           ))}
         </CardContent>
       </Card>
+
+      {/* 清除服务商配置确认弹窗 */}
+      <AlertDialog open={!!clearTarget} onOpenChange={(open) => { if (!open) setClearTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认清除 {clearTarget?.label} 的配置？</AlertDialogTitle>
+            <AlertDialogDescription>
+              将删除该服务商的 API Key 与模型配置，清除后立即停用：用户端模型选择器将不再显示它。
+              {clearTarget && config?.defaultProvider === clearTarget.key
+                ? ' 该服务商当前是默认服务商，清除后系统将自动切换到其他已配置的服务商，不会中断服务。'
+                : ''}
+              重新粘贴 Key 即可恢复启用。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
+              onClick={() => {
+                const target = clearTarget;
+                setClearTarget(null);
+                if (target) handleClearProvider(target);
+              }}
+            >
+              确认清除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

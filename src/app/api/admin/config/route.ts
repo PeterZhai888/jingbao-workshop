@@ -98,3 +98,29 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({ success: true });
 }
+
+/**
+ * DELETE 清除某家服务商的全部配置（ai_key_xxx + ai_model_xxx），即停用该服务商
+ * body: { provider: 'deepseek' }
+ * 若清除的是当前默认服务商，系统自动 fallback 到其他已配置服务商，不会中断服务
+ */
+export async function DELETE(request: NextRequest) {
+  const auth = authenticateAdmin(request);
+  if (!auth.ok) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status || 401 });
+  }
+  let body: { provider?: string } = {};
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ success: false, error: '请求格式错误' }, { status: 400 });
+  }
+  const provider = (body.provider || '').trim();
+  if (!PROVIDER_KEYS.includes(provider as never)) {
+    return NextResponse.json({ success: false, error: `未知提供商: ${provider}` }, { status: 400 });
+  }
+  const del = db.prepare('DELETE FROM system_config WHERE key = ?');
+  del.run(`ai_key_${provider}`);
+  del.run(`ai_model_${provider}`);
+  return NextResponse.json({ success: true });
+}

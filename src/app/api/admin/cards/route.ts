@@ -79,3 +79,60 @@ export async function POST(request: NextRequest) {
   });
   return NextResponse.json({ success: true });
 }
+
+/**
+ * DELETE 删除卡密（仅允许 unused 未激活卡密；已激活/冻结/作废卡有关联使用记录，走状态机不物理删除）
+ * body: { codes: string[] }（单删传一个元素即可）
+ */
+export async function DELETE(request: NextRequest) {
+  const auth = authenticateAdmin(request);
+  if (!auth.ok) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status || 401 });
+  }
+  const ip = getClientIP(request.headers);
+
+  let body: { codes?: string[] } = {};
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ success: false, error: '请求格式错误' }, { status: 400 });
+  }
+  const codes = Array.isArray(body.codes)
+    ? body.codes.map((c) => String(c || '').trim().toUpperCase()).filter(Boolean).slice(0, 500)
+    : [];
+  if (codes.length === 0) {
+    return NextResponse.json({ success: false, error: '请指定要删除的卡密' }, { status: 400 });
+  }
+
+  const del = db.prepare(`DELETE FROM cards WHERE code = ? AND status = 'unused'`);
+  const skipped: string[] = [];
+  let deleted = 0;
+  const tx = db.transaction((list: string[]) => {
+    for (const code of list) {
+      const r = del.run(code);
+      if (r.changes) {
+        deleted++;
+      } else {
+        skipped.push(code); // 不存在或状态非 unused（有业务数据关联，不允许物理删除）
+      }
+    }
+  });
+  tx(codes);
+
+  writeUsageLog({
+    cardCode: codes[0] || '-',
+    action: 'admin_delete_cards',
+    success: true,
+    ip,
+    detail: { by: auth.username, deleted, skipped: skipped.length, codes: codes.slice(0, 20) },
+  });
+
+  return NextResponse.json({
+    success: true,
+    deleted,
+    skipped,
+    message: skipped.length
+      ? `已删除 ${deleted} 张；${skipped.length} 张非未激活状态未删除（已激活卡密请使用冻结/作废）`
+      : `已删除 ${deleted} 张卡密`,
+  });
+}
