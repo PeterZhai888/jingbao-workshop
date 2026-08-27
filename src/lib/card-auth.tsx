@@ -34,23 +34,40 @@ export function CardAuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 初始化：从 localStorage 读取并验证
+  // 初始化：从 localStorage 读取，并向服务端校验 token 是否仍有效
+  // （防止本地残留失效 session：不仅会导致生成报错，还会把首页激活表单藏起来，用户无法重新激活）
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      try {
-        const parsed: AuthSession = JSON.parse(stored);
-        // 检查是否过期
-        if (new Date(parsed.expiresAt) > new Date()) {
-          setSession(parsed);
-        } else {
-          localStorage.removeItem(STORAGE_KEY);
-        }
-      } catch {
-        localStorage.removeItem(STORAGE_KEY);
-      }
+    if (!stored) {
+      setIsLoading(false);
+      return;
     }
-    setIsLoading(false);
+    let parsed: AuthSession | null = null;
+    try {
+      parsed = JSON.parse(stored) as AuthSession;
+    } catch {
+      localStorage.removeItem(STORAGE_KEY);
+      setIsLoading(false);
+      return;
+    }
+    if (!parsed?.token || new Date(parsed.expiresAt) <= new Date()) {
+      localStorage.removeItem(STORAGE_KEY);
+      setIsLoading(false);
+      return;
+    }
+    setSession(parsed);
+    // 服务端二次校验：token 失效（重启换密钥/卡密被删等）则立即清除本地残留
+    fetch('/api/card/usage', { headers: { Authorization: `Bearer ${parsed.token}` } })
+      .then((res) => {
+        if (res.status === 401) {
+          localStorage.removeItem(STORAGE_KEY);
+          setSession(null);
+        }
+      })
+      .catch(() => {
+        // 网络异常时保留本地 session，不打断用户
+      })
+      .finally(() => setIsLoading(false));
   }, []);
 
   const verifyCard = useCallback(async (code: string): Promise<boolean> => {

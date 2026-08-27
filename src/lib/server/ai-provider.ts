@@ -168,24 +168,36 @@ export interface ChatMessage {
   content: string;
 }
 
-// ===== HTTPS_PROXY 代理支持（Node fetch 默认不走代理，沙箱/企业网环境必需）=====
-let cachedProxyDispatcher: { dispatcher: unknown } | null | undefined;
+// ===== HTTPS_PROXY 代理支持（Node 内置 fetch 默认不走代理，沙箱/企业网环境必需）=====
+// 注意：npm 版 undici 的 ProxyAgent 与 Node 内置 fetch（内部旧版 undici）不兼容，
+// 因此启用代理时必须使用 undici 包自带的 fetch，而不是全局 fetch。
+interface ProxyFetch {
+  fetch: (url: string, init: Record<string, unknown>) => Promise<Response>;
+}
 
-/** 读取代理环境变量，返回 fetch 的 dispatcher 选项；无代理环境返回 null */
-function getProxyDispatcher(): { dispatcher: unknown } | null {
-  if (cachedProxyDispatcher !== undefined) return cachedProxyDispatcher;
-  cachedProxyDispatcher = null;
+let cachedProxyFetch: ProxyFetch | null | undefined;
+
+/** 读取代理环境变量，返回带 ProxyAgent 的 fetch；无代理环境返回 null（用全局 fetch） */
+function getProxyFetch(): ProxyFetch | null {
+  if (cachedProxyFetch !== undefined) return cachedProxyFetch;
+  cachedProxyFetch = null;
   const proxyUrl = process.env.HTTPS_PROXY || process.env.https_proxy || process.env.HTTP_PROXY || process.env.http_proxy;
   if (!proxyUrl) return null;
   try {
-    // undici 是 Node 内置 fetch 的底层实现，随 Node 一起安装
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { ProxyAgent } = require('undici') as { ProxyAgent: new (url: string) => unknown };
-    cachedProxyDispatcher = { dispatcher: new ProxyAgent(proxyUrl) };
+    const { ProxyAgent, fetch: undiciFetch } = require('undici') as {
+      ProxyAgent: new (url: string) => unknown;
+      fetch: (url: string, init: Record<string, unknown>) => Promise<Response>;
+    };
+    const dispatcher = new ProxyAgent(proxyUrl);
+    cachedProxyFetch = {
+      fetch: (url: string, init: Record<string, unknown>) =>
+        undiciFetch(url, { ...init, dispatcher }),
+    };
   } catch {
     // undici 不可用时忽略，直连
   }
-  return cachedProxyDispatcher;
+  return cachedProxyFetch;
 }
 
 export interface CallAIOptions {
@@ -220,7 +232,9 @@ export async function callAI(options: CallAIOptions): Promise<CallAIResult> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const res = await fetch(`${provider.baseURL}/chat/completions`, {
+      // 沙箱/企业网络需走 HTTP(S)_PROXY 代理访问外部 API；无代理环境用全局 fetch
+      const doFetch = getProxyFetch()?.fetch ?? ((u: string, i: RequestInit) => fetch(u, i));
+      const res = await doFetch(`${provider.baseURL}/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -233,9 +247,7 @@ export async function callAI(options: CallAIOptions): Promise<CallAIResult> {
           stream: false,
         }),
         signal: controller.signal,
-        // 沙箱/企业网络需走 HTTP(S)_PROXY 代理访问外部 API；Node fetch 默认不走代理
-        ...(getProxyDispatcher() ?? {}),
-      } as RequestInit);
+      });
 
       if (res.ok) {
         const data = (await res.json()) as {

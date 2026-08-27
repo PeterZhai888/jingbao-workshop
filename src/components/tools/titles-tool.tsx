@@ -50,7 +50,7 @@ function detectStyle(title: string): string {
 }
 
 export function TitlesTool() {
-  const { session, refreshUsage } = useCardAuth();
+  const { session, refreshUsage, logout } = useCardAuth();
   const [topic, setTopic] = useState('');
   const [loading, setLoading] = useState(false);
   const [titles, setTitles] = useState<string[] | null>(null);
@@ -85,6 +85,8 @@ export function TitlesTool() {
         const data = await res.json();
         if (!res.ok || !data.success) {
           if (data.code === 'SESSION_INVALID') {
+            // 清除本地失效 session，让首页重新显示激活表单
+            logout();
             toast.error('登录状态已失效，请重新验证卡密');
             return;
           }

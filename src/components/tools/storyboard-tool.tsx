@@ -45,7 +45,7 @@ const MOCK_SHOTS: StoryboardShot[] = [
 ];
 
 export function StoryboardTool() {
-  const { session, refreshUsage } = useCardAuth();
+  const { session, refreshUsage, logout } = useCardAuth();
   const [inputText, setInputText] = useState('');
   const [shotCount, setShotCount] = useState(10); // 分镜数量 3-15，默认 10
   const [customMode, setCustomMode] = useState(false);
@@ -102,6 +102,8 @@ export function StoryboardTool() {
         const data = await res.json();
         if (!res.ok || !data.success) {
           if (data.code === 'SESSION_INVALID') {
+            // 清除本地失效 session，让首页重新显示激活表单
+            logout();
             toast.error('登录状态已失效，请重新验证卡密');
             return;
           }

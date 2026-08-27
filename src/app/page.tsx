@@ -23,7 +23,7 @@ import {
 import { toast } from 'sonner';
 
 export default function HomePage() {
-  const { session, isLoading, verifyCard } = useCardAuth();
+  const { session, isLoading, verifyCard, logout } = useCardAuth();
   const router = useRouter();
   const [cardCode, setCardCode] = useState('');
   const [verifying, setVerifying] = useState(false);
@@ -263,6 +263,9 @@ export default function HomePage() {
                         <Sparkles className="h-4 w-4" /> 生成标题
                       </Button>
                     </Link>
+                    <Button variant="ghost" size="sm" onClick={logout} className="text-muted-foreground">
+                      切换卡密
+                    </Button>
                   </div>
                 </div>
               ) : (
