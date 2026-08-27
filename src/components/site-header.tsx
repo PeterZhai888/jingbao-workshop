@@ -6,13 +6,13 @@ import { useCardAuth } from '@/lib/card-auth';
 import { Button } from '@/components/ui/button';
 import {
   Film,
-  Sparkles,
   History,
   LogOut,
   Shield,
   Clapperboard,
   Menu,
   X,
+  Home,
 } from 'lucide-react';
 import { useState } from 'react';
 import {
@@ -25,8 +25,8 @@ import {
 import { Badge } from '@/components/ui/badge';
 
 const navItems = [
-  { href: '/storyboard', label: '文本转分镜', icon: Clapperboard },
-  { href: '/titles', label: 'AI爆款标题', icon: Sparkles },
+  { href: '/', label: '首页', icon: Home },
+  { href: '/studio', label: '创作工具', icon: Clapperboard },
   { href: '/history', label: '历史记录', icon: History },
 ];
 
@@ -55,9 +55,11 @@ export function SiteHeader() {
 
         {/* Desktop Nav */}
         <nav className="hidden md:flex items-center gap-1">
-          {session && navItems.map(item => {
+          {navItems.map(item => {
             const Icon = item.icon;
-            const active = pathname === item.href;
+            const needAuth = item.href !== '/';
+            if (needAuth && !session) return null;
+            const active = item.href === '/' ? pathname === '/' : pathname?.startsWith(item.href);
             return (
               <Link
                 key={item.href}
@@ -134,9 +136,11 @@ export function SiteHeader() {
       {mobileOpen && (
         <div className="md:hidden border-t border-border/60 bg-white">
           <div className="mx-auto max-w-6xl px-4 py-3 space-y-1">
-            {session && navItems.map(item => {
+            {navItems.map(item => {
               const Icon = item.icon;
-              const active = pathname === item.href;
+              const needAuth = item.href !== '/';
+              if (needAuth && !session) return null;
+              const active = item.href === '/' ? pathname === '/' : pathname?.startsWith(item.href);
               return (
                 <Link
                   key={item.href}

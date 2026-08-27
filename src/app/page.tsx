@@ -42,7 +42,7 @@ export default function HomePage() {
     try {
       const ok = await verifyCard(clean);
       if (ok) {
-        setTimeout(() => router.push('/storyboard'), 300);
+        setTimeout(() => router.push('/studio'), 300);
       }
     } finally {
       setVerifying(false);
@@ -93,14 +93,14 @@ export default function HomePage() {
           <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
             {session ? (
               <>
-                <Link href="/storyboard">
+                <Link href="/studio?tool=storyboard">
                   <Button size="lg" className="gap-2 w-full sm:w-auto shadow-lg shadow-primary/20">
                     <Clapperboard className="h-5 w-5" />
                     开始使用
                     <ArrowRight className="h-4 w-4" />
                   </Button>
                 </Link>
-                <Link href="/titles">
+                <Link href="/studio?tool=titles">
                   <Button size="lg" variant="outline" className="gap-2 w-full sm:w-auto">
                     <Sparkles className="h-5 w-5" />
                     生成爆款标题
@@ -253,12 +253,12 @@ export default function HomePage() {
                     今日已用 {session.dailyUsed}/{session.dailyLimit} 次 · 有效期至 {new Date(session.cardExpiresAt).toLocaleDateString('zh-CN')}
                   </div>
                   <div className="flex flex-col sm:flex-row gap-2 justify-center">
-                    <Link href="/storyboard">
+                    <Link href="/studio?tool=storyboard">
                       <Button className="gap-1.5 w-full sm:w-auto">
                         <Clapperboard className="h-4 w-4" /> 去写分镜
                       </Button>
                     </Link>
-                    <Link href="/titles">
+                    <Link href="/studio?tool=titles">
                       <Button variant="outline" className="gap-1.5 w-full sm:w-auto">
                         <Sparkles className="h-4 w-4" /> 生成标题
                       </Button>
@@ -310,6 +310,19 @@ export default function HomePage() {
           </Card>
         </div>
       </section>
+
+      {/* 页脚（含低调的管理后台入口） */}
+      <footer className="border-t border-border/60 py-6">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 flex items-center justify-between gap-4">
+          <p className="text-xs text-muted-foreground">AI短视频工具箱 · 让创作更简单</p>
+          <a
+            href="/admin"
+            className="text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+          >
+            管理入口
+          </a>
+        </div>
+      </footer>
     </div>
   );
 }

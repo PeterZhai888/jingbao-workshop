@@ -246,6 +246,19 @@ const lim3 = await http('POST', '/api/ai/storyboard', { token: userToken, body: 
 check('日满测试3: 第3次 返回 429 今日次数已用完', lim3.status === 429 && /次数|DAILY_LIMIT/.test(lim3.json?.error || lim3.text || ''),
   `status=${lim3.status} body=${lim3.text.slice(0, 80)}`);
 
+// ======== ⑦ 恢复现场：测试数据自愈（避免污染真实使用数据） ========
+console.log('\n======== ⑦ 恢复现场（测试卡恢复 unused/daily_limit=20 + 清当日计数） ========\n');
+const restore = spawnSync('node', ['-e', `
+  const Database = require('better-sqlite3');
+  const path = require('path');
+  const db = new Database(path.resolve(process.cwd(), './data/ai-video-tool.db'));
+  db.prepare("UPDATE cards SET daily_limit = 20, status = 'unused', activated_at = NULL, expires_at = NULL WHERE code = 'SP-TEST12345678'").run();
+  db.prepare("DELETE FROM usage_logs WHERE card_id = (SELECT id FROM cards WHERE code='SP-TEST12345678')").run();
+  const c = db.prepare("SELECT code, status, daily_limit FROM cards WHERE code='SP-TEST12345678'").get();
+  console.log('恢复后测试卡状态:', JSON.stringify(c));
+`], { cwd: '/workspace', encoding: 'utf8' });
+console.log(restore.stdout.trim());
+
 // ======== 结果汇总 ========
 console.log('\n======== E2E 测试汇总 =========\n');
 console.log(`通过: ${pass.length}/${step}`);
