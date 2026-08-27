@@ -58,6 +58,44 @@ const PROVIDERS: Record<ProviderKey, ProviderDef> = {
 /** 全部提供商 key（校验用） */
 export const PROVIDER_KEYS = Object.keys(PROVIDERS) as ProviderKey[];
 
+/** 每家服务商的精选模型清单（含价格档位标注，管理后台下拉可选） */
+export const MODEL_CATALOG: Record<ProviderKey, Array<{ id: string; label: string }>> = {
+  qwen: [
+    { id: 'qwen-turbo', label: 'qwen-turbo · 低价高速（默认）' },
+    { id: 'qwen-plus', label: 'qwen-plus · 标准价，能力均衡' },
+    { id: 'qwen-max', label: 'qwen-max · 旗舰价，最强能力' },
+    { id: 'qwen-flash', label: 'qwen-flash · 免费额度，极低价' },
+  ],
+  zhipu: [
+    { id: 'glm-4-flash', label: 'glm-4-flash · 免费（默认）' },
+    { id: 'glm-4-air', label: 'glm-4-air · 低价' },
+    { id: 'glm-4-airx', label: 'glm-4-airx · 低价加速' },
+    { id: 'glm-4-plus', label: 'glm-4-plus · 标准价' },
+    { id: 'glm-4-long', label: 'glm-4-long · 长文本' },
+  ],
+  deepseek: [
+    { id: 'deepseek-chat', label: 'deepseek-chat · 标准价（默认）' },
+    { id: 'deepseek-reasoner', label: 'deepseek-reasoner · 推理模型，稍贵' },
+  ],
+  hunyuan: [
+    { id: 'hunyuan-lite', label: 'hunyuan-lite · 免费额度（默认）' },
+    { id: 'hunyuan-standard', label: 'hunyuan-standard · 标准价' },
+    { id: 'hunyuan-pro', label: 'hunyuan-pro · 旗舰价' },
+  ],
+  doubao: [
+    { id: 'doubao-lite-4k', label: 'doubao-lite-4k · 低价（默认，可填接入点ID）' },
+    { id: 'doubao-lite-32k', label: 'doubao-lite-32k · 低价长文本' },
+    { id: 'doubao-pro-4k', label: 'doubao-pro-4k · 标准价' },
+    { id: 'doubao-pro-32k', label: 'doubao-pro-32k · 标准价长文本' },
+  ],
+  siliconflow: [
+    { id: 'Qwen/Qwen2.5-7B-Instruct', label: 'Qwen2.5-7B · 免费额度（默认）' },
+    { id: 'Qwen/Qwen2.5-72B-Instruct', label: 'Qwen2.5-72B · 标准价，能力强' },
+    { id: 'deepseek-ai/DeepSeek-V3', label: 'DeepSeek-V3 · 标准价' },
+    { id: 'THUDM/glm-4-9b-chat', label: 'glm-4-9b · 免费额度' },
+  ],
+};
+
 /** 读取 system_config 单值 */
 function getSystemConfig(key: string): string | null {
   try {
@@ -98,11 +136,15 @@ export function listProviders() {
   return (Object.keys(PROVIDERS) as ProviderKey[]).map((k) => {
     const def = PROVIDERS[k];
     const keyFromDb = getSystemConfig(`ai_key_${def.key}`);
+    const currentModel = (def.envModel && process.env[def.envModel]) || getSystemConfig(`ai_model_${def.key}`) || def.model;
     return {
       key: def.key,
       label: def.label,
       defaultModel: def.model,
-      currentModel: (def.envModel && process.env[def.envModel]) || getSystemConfig(`ai_model_${def.key}`) || def.model,
+      currentModel,
+      // 当前模型是否来自后台自定义（非预设清单内 → 自定义；或存了 ai_model_ 也算自定义选择）
+      modelCustom: !!getSystemConfig(`ai_model_${def.key}`) && !MODEL_CATALOG[k].some((m) => m.id === currentModel),
+      models: MODEL_CATALOG[k],
       configured: !!(keyFromDb || process.env[def.envKey]),
       configuredFrom: keyFromDb ? '后台配置' : (process.env[def.envKey] ? '环境变量' : '未配置'),
     };

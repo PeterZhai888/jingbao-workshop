@@ -686,11 +686,18 @@ function LogsPanel({ token }: { token: string }) {
 }
 
 // ========= Tab 3: 系统配置 =========
+interface ModelOption {
+  id: string;
+  label: string;
+}
+
 interface ProviderInfo {
   key: string;
   label: string;
   defaultModel: string;
   currentModel: string;
+  modelCustom: boolean;
+  models: ModelOption[];
   configured: boolean;
   configuredFrom: string;
 }
@@ -699,6 +706,142 @@ interface ConfigData {
   defaultProvider: string;
   dailyLimit: number;
   qpsLimit: number;
+}
+
+// 模型选择器：预设下拉（含价格档位）+ 自定义输入兜底
+function ModelSelector({
+  provider,
+  token,
+  onSaved,
+}: {
+  provider: ProviderInfo;
+  token: string;
+  onSaved: () => void;
+}) {
+  const isInCatalog = provider.models.some((m) => m.id === provider.currentModel);
+  // 状态：preset（下拉选择）/ custom（自定义输入）
+  const [mode, setMode] = useState<'preset' | 'custom'>(isInCatalog ? 'preset' : 'custom');
+  const [selected, setSelected] = useState(isInCatalog ? provider.currentModel : provider.models[0]?.id || '');
+  const [custom, setCustom] = useState(isInCatalog ? '' : provider.currentModel);
+  const [saving, setSaving] = useState(false);
+
+  // 切换到其他服务商时重置（组件复用）
+  useEffect(() => {
+    const inCat = provider.models.some((m) => m.id === provider.currentModel);
+    setMode(inCat ? 'preset' : 'custom');
+    setSelected(inCat ? provider.currentModel : provider.models[0]?.id || '');
+    setCustom(inCat ? '' : provider.currentModel);
+  }, [provider.key, provider.currentModel, provider.models]);
+
+  const targetModel = mode === 'preset' ? selected : custom.trim();
+
+  const handleSave = async () => {
+    if (!targetModel) {
+      toast.error('请选择或输入模型名');
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch('/api/admin/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ [`ai_model_${provider.key}`]: targetModel }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`${provider.label} 模型已切换为 ${targetModel}`);
+        onSaved();
+      } else {
+        toast.error(data.error || '保存失败');
+      }
+    } catch {
+      toast.error('网络错误');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleResetDefault = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch('/api/admin/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ [`ai_model_${provider.key}`]: provider.defaultModel }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`已恢复默认模型 ${provider.defaultModel}`);
+        onSaved();
+      } else {
+        toast.error(data.error || '操作失败');
+      }
+    } catch {
+      toast.error('网络错误');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <label className="text-xs font-medium text-muted-foreground">大模型</label>
+        <div className="flex gap-1 text-xs">
+          <button
+            className={`rounded px-2 py-0.5 transition-colors ${mode === 'preset' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}
+            onClick={() => setMode('preset')}
+          >
+            常用模型
+          </button>
+          <button
+            className={`rounded px-2 py-0.5 transition-colors ${mode === 'custom' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}
+            onClick={() => setMode('custom')}
+          >
+            自定义
+          </button>
+        </div>
+      </div>
+      <div className="flex gap-2">
+        {mode === 'preset' ? (
+          <Select value={selected} onValueChange={setSelected}>
+            <SelectTrigger className="flex-1">
+              <SelectValue placeholder="选择模型" />
+            </SelectTrigger>
+            <SelectContent>
+              {provider.models.map((m) => (
+                <SelectItem key={m.id} value={m.id}>
+                  {m.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <Input
+            placeholder="填入模型名（如 doubao 接入点ID、新发布的模型）"
+            value={custom}
+            onChange={(e) => setCustom(e.target.value)}
+            className="flex-1 font-mono text-xs"
+          />
+        )}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleSave}
+          disabled={saving || !targetModel || targetModel === provider.currentModel}
+          className="gap-1.5 shrink-0"
+        >
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Cpu className="h-4 w-4" />}
+          切换模型
+        </Button>
+        {provider.currentModel !== provider.defaultModel && (
+          <Button variant="ghost" size="sm" onClick={handleResetDefault} disabled={saving} className="shrink-0 text-xs">
+            恢复默认
+          </Button>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function ConfigPanel({ token }: { token: string }) {
@@ -848,7 +991,7 @@ function ConfigPanel({ token }: { token: string }) {
             <Cpu className="h-5 w-5 text-fuchsia-500" /> AI 服务商（OpenAI 兼容格式）
           </CardTitle>
           <CardDescription>
-            每家填入对应平台的 API Key 即可启用；默认模型可在部署时通过环境变量覆盖
+            每家填入对应平台的 API Key 即可启用；模型可下拉切换（标注价格档位），切换后立即生效
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -865,9 +1008,9 @@ function ConfigPanel({ token }: { token: string }) {
                     <KeyRound className="h-3 w-3" /> 未配置
                   </Badge>
                 )}
-                <span className="text-xs text-muted-foreground ml-auto font-mono">模型：{p.currentModel}</span>
+                <span className="text-xs text-muted-foreground ml-auto font-mono">当前模型：{p.currentModel}</span>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 mb-2">
                 <Input
                   type="password"
                   placeholder={p.configured ? '已配置（输入可覆盖）' : `填入 ${p.label} API Key`}
@@ -878,6 +1021,7 @@ function ConfigPanel({ token }: { token: string }) {
                   <KeyRound className="h-4 w-4" /> 保存Key
                 </Button>
               </div>
+              <ModelSelector provider={p} token={token} onSaved={load} />
             </div>
           ))}
         </CardContent>
