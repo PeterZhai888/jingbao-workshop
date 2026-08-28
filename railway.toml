@@ -1,10 +1,43 @@
+# Railway Native 构建（nixpacks）— Render 失败时的 B 计划
+# 用法：Railway Dashboard → New Project → Deploy from GitHub repo
+#   → Settings → 环境变量 填入（JWT_SECRET / CONFIG_ENCRYPTION_KEY / TRUST_PROXY=1 / DB_PATH=/data/jingbao.db）
+#   → 挂载 Volume: mountPath = /data
+# 注：构建期塞入临时 JWT_SECRET 用于绕过构建阶段的 import 执行，运行期 Railway 会注入真实密钥覆盖
+[[build.env]]
+name = "JWT_SECRET"
+value = "railway-build-phase-dummy-key-NOT-for-production-use-000000"
+[[build.env]]
+name = "CONFIG_ENCRYPTION_KEY"
+value = "railway-build-phase-dummy-key-NOT-for-production-use-000000"
+[[build.env]]
+name = "NEXT_TELEMETRY_DISABLED"
+value = "1"
+[[build.env]]
+name = "NEXT_PRIVATE_NTBA_CPUS"
+value = "4"
+[[build.env]]
+name = "NODE_OPTIONS"
+value = "--max-old-space-size=4096"
+
 [build]
-builder = "dockerfile"
+builder = "nixpacks"
+# nixpacks Node provider 默认会跑 npm/pnpm install + build 脚本；
+# 这里显式指定 buildCommand 以防默认 package.json 的 build 脚本只跑 next build（少了 tsup+cp startup）
+buildCommand = """
+  set -euo pipefail
+  rm -f .babelrc babel.config.*
+  pnpm install --frozen-lockfile || pnpm install
+  pnpm next build
+  pnpm tsup src/server.ts src/lib/server/config.ts --format cjs --platform node --target node20 --outDir dist --no-splitting --no-minify
+  cp src/startup.ts dist/startup.js
+"""
 
 [deploy]
-startCommand = "node dist/startup.js"
+startCommand = "NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 NODE_OPTIONS='--max-old-space-size=1536' node dist/startup.js"
 healthcheckPath = "/"
 restartPolicyType = "always"
 
 [service]
-port = 5000
+# Railway 默认 PORT 是动态注入的，不要硬编码；server.ts 里会读 process.env.PORT
+# 若要固定可改成 5000 并在 Variables 里手动设 PORT=5000
+# port = 5000
