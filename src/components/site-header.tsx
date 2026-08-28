@@ -23,6 +23,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
+import { SITE_NAME } from '@/lib/site';
 
 const navItems = [
   { href: '/', label: '首页', icon: Home },
@@ -49,7 +50,7 @@ export function SiteHeader() {
             <Film className="h-5 w-5" />
           </div>
           <span className="bg-gradient-to-r from-primary to-indigo-500 bg-clip-text text-transparent">
-            AI短视频工具箱
+            {SITE_NAME}
           </span>
         </Link>
 

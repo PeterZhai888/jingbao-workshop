@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { SITE_NAME } from '@/lib/site';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -1875,7 +1876,7 @@ export default function AdminPage() {
       <footer className="border-t border-border/60 py-4">
         <div className="mx-auto max-w-6xl px-4 text-center text-xs text-muted-foreground flex items-center justify-center gap-1.5">
           <Film className="h-3.5 w-3.5" />
-          AI短视频工具箱 · 管理后台
+          {SITE_NAME} · 管理后台
         </div>
       </footer>
 

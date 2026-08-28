@@ -87,14 +87,14 @@ export const TIER_META: Record<ModelTier, { label: string; icon: string; cost: n
 export const MODEL_CATALOG: Record<ProviderKey, CatalogModel[]> = {
   qwen: [
     { id: 'qwen-turbo', label: 'qwen-turbo · 低价高速（默认）', tier: 'fast', note: '速度快，适合日常生成' },
-    { id: 'qwen-flash', label: 'qwen-flash · 免费额度，极低价', tier: 'fast', note: '免费额度，速度快' },
+    { id: 'qwen-flash', label: 'qwen-flash · 免费额度，极低价', tier: 'fast', note: '响应迅捷，出片更快' },
     { id: 'qwen-plus', label: 'qwen-plus · 标准价，能力均衡', tier: 'plus', note: '更强创意，适合精写' },
     { id: 'qwen-max', label: 'qwen-max · 旗舰价，最强能力', tier: 'flagship', note: '最强质量，速度稍慢' },
   ],
   zhipu: [
-    { id: 'glm-4-flash', label: 'glm-4-flash · 免费（默认）', tier: 'fast', note: '免费额度，速度快' },
+    { id: 'glm-4-flash', label: 'glm-4-flash · 免费（默认）', tier: 'fast', note: '响应迅捷，出片更快' },
     { id: 'glm-4-air', label: 'glm-4-air · 低价', tier: 'standard', note: '均衡之选，文案质量佳' },
-    { id: 'glm-4-airx', label: 'glm-4-airx · 低价加速', tier: 'fast', note: '低价加速，响应快' },
+    { id: 'glm-4-airx', label: 'glm-4-airx · 低价加速', tier: 'fast', note: '极速响应，适合快速迭代' },
     { id: 'glm-4-plus', label: 'glm-4-plus · 标准价', tier: 'plus', note: '更强创意，适合精写' },
     { id: 'glm-4-long', label: 'glm-4-long · 长文本', tier: 'standard', note: '长文本专用' },
   ],
@@ -103,19 +103,19 @@ export const MODEL_CATALOG: Record<ProviderKey, CatalogModel[]> = {
     { id: 'deepseek-reasoner', label: 'deepseek-reasoner · 推理模型，稍贵', tier: 'flagship', note: '深度思考，最强质量' },
   ],
   hunyuan: [
-    { id: 'hunyuan-lite', label: 'hunyuan-lite · 免费额度（默认）', tier: 'fast', note: '免费额度，速度快' },
+    { id: 'hunyuan-lite', label: 'hunyuan-lite · 免费额度（默认）', tier: 'fast', note: '响应迅捷，出片更快' },
     { id: 'hunyuan-standard', label: 'hunyuan-standard · 标准价', tier: 'standard', note: '均衡之选，文案质量佳' },
     { id: 'hunyuan-pro', label: 'hunyuan-pro · 旗舰价', tier: 'flagship', note: '最强质量，速度稍慢' },
   ],
   doubao: [
     { id: 'doubao-lite-4k', label: 'doubao-lite-4k · 低价（默认，可填接入点ID）', tier: 'fast', note: '速度快，适合日常生成' },
-    { id: 'doubao-lite-32k', label: 'doubao-lite-32k · 低价长文本', tier: 'fast', note: '低价长文本' },
+    { id: 'doubao-lite-32k', label: 'doubao-lite-32k · 低价长文本', tier: 'fast', note: '支持长文案创作' },
     { id: 'doubao-pro-4k', label: 'doubao-pro-4k · 标准价', tier: 'standard', note: '均衡之选，文案质量佳' },
-    { id: 'doubao-pro-32k', label: 'doubao-pro-32k · 标准价长文本', tier: 'plus', note: '标准价长文本' },
+    { id: 'doubao-pro-32k', label: 'doubao-pro-32k · 标准价长文本', tier: 'plus', note: '长文案精写之选' },
   ],
   siliconflow: [
-    { id: 'Qwen/Qwen2.5-7B-Instruct', label: 'Qwen2.5-7B · 免费额度（默认）', tier: 'fast', note: '免费额度，速度快' },
-    { id: 'THUDM/glm-4-9b-chat', label: 'glm-4-9b · 免费额度', tier: 'fast', note: '免费额度，速度快' },
+    { id: 'Qwen/Qwen2.5-7B-Instruct', label: 'Qwen2.5-7B · 免费额度（默认）', tier: 'fast', note: '响应迅捷，出片更快' },
+    { id: 'THUDM/glm-4-9b-chat', label: 'glm-4-9b · 免费额度', tier: 'fast', note: '响应迅捷，出片更快' },
     { id: 'Qwen/Qwen2.5-72B-Instruct', label: 'Qwen2.5-72B · 标准价，能力强', tier: 'plus', note: '更强创意，适合精写' },
     { id: 'deepseek-ai/DeepSeek-V3', label: 'DeepSeek-V3 · 标准价', tier: 'plus', note: '更强创意，适合精写' },
   ],

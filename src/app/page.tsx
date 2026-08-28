@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCardAuth } from '@/lib/card-auth';
+import { SITE_NAME, SITE_TAGLINE } from '@/lib/site';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -317,7 +318,7 @@ export default function HomePage() {
       {/* 页脚（含低调的管理后台入口） */}
       <footer className="border-t border-border/60 py-6">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 flex items-center justify-between gap-4">
-          <p className="text-xs text-muted-foreground">AI短视频工具箱 · 让创作更简单</p>
+          <p className="text-xs text-muted-foreground">{SITE_NAME} · {SITE_TAGLINE}</p>
           <a
             href="/admin"
             className="text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors"
