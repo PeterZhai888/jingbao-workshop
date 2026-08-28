@@ -1035,6 +1035,8 @@ function ConfigPanel({ token }: { token: string }) {
   const [clearTarget, setClearTarget] = useState<ProviderInfo | null>(null);
   // JWT 密钥安全状态（true = 仍在用开发默认值）
   const [usingFallbackJwtSecret, setUsingFallbackJwtSecret] = useState(false);
+  // API Key 加密存储是否生效（未配置 CONFIG_ENCRYPTION_KEY 时为 false）
+  const [apiKeyEncrypted, setApiKeyEncrypted] = useState(true);
   // 运行护栏
   const [guard, setGuard] = useState<GuardConfig>({ servicePaused: false, globalDailyLimit: 0 });
   const [guardSaving, setGuardSaving] = useState(false);
@@ -1051,6 +1053,7 @@ function ConfigPanel({ token }: { token: string }) {
         setConfig(data.config);
         setProviders(data.providers || []);
         setUsingFallbackJwtSecret(!!data.security?.usingFallbackJwtSecret);
+        setApiKeyEncrypted(data.security?.apiKeyEncrypted !== false);
         if (data.guard) setGuard(data.guard);
         setExhaustedTip(data.exhaustedTip || '');
       }
@@ -1155,7 +1158,9 @@ function ConfigPanel({ token }: { token: string }) {
       });
       const data = await res.json();
       if (data.success) {
-        toast.success('API Key 已保存至数据库（生产环境建议改用环境变量注入，避免库文件泄露暴露密钥）');
+        toast.success(apiKeyEncrypted
+          ? 'API Key 已加密存储（AES-256-GCM）'
+          : 'API Key 已保存（明文存储，配置 CONFIG_ENCRYPTION_KEY 环境变量后自动加密）');
         setKeyDrafts((d) => ({ ...d, [providerKey]: '' }));
         load();
       } else {
@@ -1205,6 +1210,17 @@ function ConfigPanel({ token }: { token: string }) {
             当前 JWT 密钥使用开发默认值，存在伪造登录令牌风险。部署生产环境前请通过环境变量
             <code className="mx-1 rounded bg-amber-100 px-1 py-0.5 text-xs">JWT_SECRET</code>
             注入强随机密钥（如 <code className="rounded bg-amber-100 px-1 py-0.5 text-xs">openssl rand -hex 32</code> 生成）。生产模式下未配置将拒绝启动。
+          </span>
+        </div>
+      )}
+      {/* API Key 明文存储提醒（未配置加密主密钥时） */}
+      {!apiKeyEncrypted && (
+        <div className="flex items-start gap-2.5 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
+          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            在后台填写的 AI API Key 当前以明文存储于数据库。建议配置环境变量
+            <code className="mx-1 rounded bg-sky-100 px-1 py-0.5 text-xs">CONFIG_ENCRYPTION_KEY</code>
+            （<code className="rounded bg-sky-100 px-1 py-0.5 text-xs">openssl rand -hex 32</code> 生成）启用 AES-256-GCM 加密存储，配置后重新保存 Key 即可加密；生产环境也可仅用环境变量注入 Key。
           </span>
         </div>
       )}

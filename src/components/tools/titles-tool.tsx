@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ModelSelector, type ModelSelection } from '@/components/model-selector';
+import { GeneratingProgress } from '@/components/generating-progress';
 
 const MOCK_TITLES = [
   '闺蜜以为我去了巴黎！其实就在这家藏在弄堂里的小店…',
@@ -268,10 +269,9 @@ export function TitlesTool() {
           )}
 
           {loading && (
-            <div className="py-20 text-center">
-              <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
-              <p className="mt-4 text-muted-foreground">AI 正在构思爆款标题...</p>
-            </div>
+            <GeneratingProgress
+              stages={['正在分析你的主题…', '正在构思爆款钩子…', '正在打磨标题文案…', '好内容值得等待，即将完成…']}
+            />
           )}
 
           {titles && !loading && (

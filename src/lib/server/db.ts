@@ -43,6 +43,9 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_usage_logs_card_id ON usage_logs(card_id);
   CREATE INDEX IF NOT EXISTS idx_usage_logs_created_at ON usage_logs(created_at);
+  -- 扣次统计高频查询：按卡密（getDailyUsed）/ 按操作类型（看板趋势、全局护栏）
+  CREATE INDEX IF NOT EXISTS idx_usage_logs_card_action ON usage_logs(card_id, action, success, created_at);
+  CREATE INDEX IF NOT EXISTS idx_usage_logs_action_time ON usage_logs(action, success, created_at);
 
   CREATE TABLE IF NOT EXISTS admin_users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

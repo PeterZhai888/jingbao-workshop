@@ -1,12 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCardByCode, isCardUsable, activateCard, writeUsageLog, touchCardUsage, getDailyUsed, getExhaustedTip } from '@/lib/server/card-service';
 import { getClientIP, uaFingerprint } from '@/lib/server/card-utils';
+import { isRateLimited, recordRateHit, rateLimitRetryAfterMs } from '@/lib/server/ip-rate-limit';
 import { signToken } from '@/lib/server/jwt';
 import { CONFIG } from '@/lib/server/config';
+
+// 每 IP 每分钟最多 10 次验证请求（防脚本刷失败日志撑爆 usage_logs 表）
+const VERIFY_IP_LIMIT = 10;
+const VERIFY_WINDOW_MS = 60_000;
 
 export async function POST(request: NextRequest) {
   const ip = getClientIP(request.headers);
   const userAgent = request.headers.get('user-agent') || '';
+
+  // IP 限流（在解析 body 之前，格式错误请求也计数）
+  if (isRateLimited(`verify:${ip}`, VERIFY_IP_LIMIT, VERIFY_WINDOW_MS)) {
+    return NextResponse.json(
+      { success: false, error: '请求过于频繁，请稍后再试' },
+      { status: 429, headers: { 'Retry-After': String(Math.ceil(rateLimitRetryAfterMs(`verify:${ip}`) / 1000) || 1) } },
+    );
+  }
+  recordRateHit(`verify:${ip}`, VERIFY_WINDOW_MS);
 
   let body: { code?: string; fingerprint?: string } = {};
   try {

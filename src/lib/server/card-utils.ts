@@ -70,15 +70,32 @@ export function todayStartKey(now = new Date()): string {
   return `${y}-${m}-${day}`;
 }
 
-/** 从请求头取客户端真实 IP（兼容反代） */
+/**
+ * 从请求头解析客户端真实 IP（防 XFF 伪造）
+ *
+ * X-Forwarded-For 格式：`client, proxy1, proxy2, ...`（每经过一层代理追加一次）
+ * 最右侧由最近的可信代理写入，越靠左越容易被客户端伪造。
+ *
+ * TRUST_PROXY 环境变量控制信任的代理层数：
+ * - '0'：完全不信任代理头（裸机直连部署时用，此时 XFF 全部是客户端自填的伪造值）
+ * - '1'（默认）：信任一层反代（Railway/Render/Nginx 单层代理），取 XFF 最后一段
+ * - 'n'：信任 n 层代理链，取倒数第 n 段
+ */
 export function getClientIP(headers: Headers): string {
-  const fwd = headers.get('x-forwarded-for');
-  if (fwd) {
-    const first = fwd.split(',')[0]?.trim();
-    if (first) return first;
+  const trust = Math.max(0, parseInt(process.env.TRUST_PROXY || '1', 10) || 0);
+  if (trust > 0) {
+    const fwd = headers.get('x-forwarded-for');
+    if (fwd) {
+      const parts = fwd.split(',').map((s) => s.trim()).filter(Boolean);
+      // 链路长度 ≥ 信任层数时，倒数第 trust 段是真实客户端 IP
+      if (parts.length >= trust) return parts[parts.length - trust];
+      // 链路比预期短（如开发环境无真实代理）：取第一段并容忍
+      if (parts.length > 0) return parts[0];
+    }
+    // 仅由可信反代写入的头（部分平台使用）
+    const real = headers.get('x-real-ip');
+    if (real) return real.trim();
   }
-  const real = headers.get('x-real-ip');
-  if (real) return real;
   return '0.0.0.0';
 }
 

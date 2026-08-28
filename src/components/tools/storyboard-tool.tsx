@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ModelSelector, type ModelSelection } from '@/components/model-selector';
+import { GeneratingProgress } from '@/components/generating-progress';
 import type { StoryboardShot, StoryboardResult } from '@/lib/types';
 import {
   Table,
@@ -374,11 +375,9 @@ export function StoryboardTool() {
             )}
 
             {loading && (
-              <div className="py-20 text-center">
-                <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
-                <p className="mt-4 text-muted-foreground">AI 正在创作分镜脚本...</p>
-                <p className="text-xs text-muted-foreground/80 mt-1">通常需要 10-30 秒</p>
-              </div>
+              <GeneratingProgress
+                stages={['正在分析文案结构…', '正在拆解分镜画面…', '正在编排台词与运镜…', '好内容值得等待，即将完成…']}
+              />
             )}
 
             {result && !loading && (
@@ -423,7 +422,24 @@ export function StoryboardTool() {
                 </TabsContent>
 
                 <TabsContent value="table" className="mt-0">
-                  <div className="rounded-xl border border-border/60 overflow-x-auto">
+                  {/* 移动端：卡片式布局（避免小屏横向滚动） */}
+                  <div className="sm:hidden space-y-3">
+                    {result.map((shot) => (
+                      <div key={shot.shotNumber} className="rounded-xl border border-border/60 bg-muted/20 p-3.5 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono font-bold text-primary">镜头 {shot.shotNumber}</span>
+                          <span className="text-xs rounded-full bg-primary/10 text-primary px-2 py-0.5">{shot.duration}</span>
+                        </div>
+                        <p className="text-sm leading-relaxed">{shot.sceneDescription}</p>
+                        {shot.dialogue && (
+                          <p className="text-sm text-muted-foreground border-l-2 border-border pl-2.5">{shot.dialogue}</p>
+                        )}
+                        <p className="text-xs text-muted-foreground">运镜：{shot.cameraMove}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {/* 桌面端：表格布局 */}
+                  <div className="hidden sm:block rounded-xl border border-border/60 overflow-x-auto">
                     <Table className="min-w-[560px]">
                       <TableHeader>
                         <TableRow>

@@ -1,6 +1,7 @@
 // AI Provider 封装层：6 家大模型统一走 OpenAI 兼容格式
 // 配置读取顺序：system_config 表（管理后台可改） → 环境变量兜底
 import { db } from './db';
+import { decryptSecret } from './secret-box';
 
 export type ProviderKey = 'qwen' | 'zhipu' | 'deepseek' | 'hunyuan' | 'doubao' | 'siliconflow';
 
@@ -143,7 +144,8 @@ function resolveOne(key: ProviderKey, model?: string): ResolvedProvider | null {
   const def = PROVIDERS[key];
   if (!def) return null;
   const keyFromDb = getSystemConfig(`ai_key_${def.key}`);
-  const apiKey = keyFromDb || process.env[def.envKey] || '';
+  // 库中 Key 可能是 AES-256-GCM 密文（enc:v1: 前缀）或历史明文，decryptSecret 均兼容
+  const apiKey = (keyFromDb ? decryptSecret(keyFromDb) : '') || process.env[def.envKey] || '';
   if (!apiKey) return null;
   const baseURL = (def.envBaseURL && process.env[def.envBaseURL]) || def.baseURL;
   // 用户指定模型必须在目录白名单内；未指定走后台配置/默认

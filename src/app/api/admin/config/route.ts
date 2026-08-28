@@ -4,6 +4,7 @@ import { db } from '@/lib/server/db';
 import { CONFIG } from '@/lib/server/config';
 import { listProviders, PROVIDER_KEYS } from '@/lib/server/ai-provider';
 import { isUsingFallbackJwtSecret } from '@/lib/server/config';
+import { encryptSecret, isEncryptionEnabled } from '@/lib/server/secret-box';
 
 type ConfKey = 'default_provider' | 'daily_limit' | 'qps_limit' | 'tier_access' | 'service_paused' | 'global_daily_limit' | 'exhausted_tip' | `ai_key_${string}`;
 
@@ -35,6 +36,8 @@ export function GET(request: NextRequest) {
     // 安全状态：JWT 密钥仍在用开发默认值时提醒（生产模式会在服务端拒绝启动，此标记主要覆盖开发/预览环境）
     security: {
       usingFallbackJwtSecret: isUsingFallbackJwtSecret,
+      // API Key 加密存储是否生效（需配置 CONFIG_ENCRYPTION_KEY 环境变量）
+      apiKeyEncrypted: isEncryptionEnabled(),
     },
   });
 }
@@ -109,7 +112,8 @@ export async function POST(request: NextRequest) {
       if (!v || v.length < 8 || v.length > 200) {
         return NextResponse.json({ success: false, error: 'API Key 格式不正确' }, { status: 400 });
       }
-      write.run(key, v);
+      // 配置了主密钥时 AES-256-GCM 加密落库（未配置则降级明文，前端会提示）
+      write.run(key, encryptSecret(v));
     } else if (key.startsWith('ai_model_')) {
       // 可选：在线覆盖某家提供商的模型名
       const provider = key.slice('ai_model_'.length);
