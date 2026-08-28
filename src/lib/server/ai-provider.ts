@@ -380,7 +380,13 @@ export function extractJSON<T>(raw: string): T | null {
     const start = Math.min(...[trimmed.indexOf('['), trimmed.indexOf('{')].filter((i) => i >= 0));
     const end = Math.max(trimmed.lastIndexOf(']'), trimmed.lastIndexOf('}'));
     if (Number.isFinite(start) && end > start) {
-      try { return JSON.parse(trimmed.slice(start, end + 1)) as T; } catch { /* 继续找 */ }
+      const slice = trimmed.slice(start, end + 1);
+      try { return JSON.parse(slice) as T; } catch { /* 继续找 */ }
+      // 常见输出瑕疵修复：尾逗号（["a","b",]）、全角引号（["a"]）后再试一次
+      const repaired = slice
+        .replace(/[\u201c\u201d]/g, '"')
+        .replace(/,\s*([\]}])/g, '$1');
+      try { return JSON.parse(repaired) as T; } catch { /* 继续找 */ }
     }
   }
   return null;
