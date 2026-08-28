@@ -15,6 +15,14 @@ if (isProduction && (!jwtSecretFromEnv || jwtSecretFromEnv === DEV_FALLBACK_JWT_
 
 export const isUsingFallbackJwtSecret = !process.env.JWT_SECRET;
 
+// 生产持久化守卫：容器/PaaS 文件系统多为临时层，未通过 DB_PATH 指向持久卷时数据会随重启丢失
+if (isProduction && !process.env.DB_PATH) {
+  console.warn(
+    '[WARN] 生产环境未设置 DB_PATH，SQLite 数据将写入容器本地路径（重启/重新部署会丢失）。' +
+    '请在托管平台挂载持久卷，并将 DB_PATH 指向卷内路径（如 /data/ai-video-tool.db）',
+  );
+}
+
 export const CONFIG = {
   // JWT 密钥（生产必须从环境变量注入强随机字符串，否则拒绝启动）
   JWT_SECRET: process.env.JWT_SECRET || DEV_FALLBACK_JWT_SECRET,
