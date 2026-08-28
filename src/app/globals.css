@@ -40,12 +40,12 @@
   --radius: 0.75rem;
   --background: #F9FAFB;
   --foreground: #111827;
-  --card: #FFFFFF;
+  --card: #FFF;
   --card-foreground: #111827;
-  --popover: #FFFFFF;
+  --popover: #FFF;
   --popover-foreground: #111827;
   --primary: #2563EB;
-  --primary-foreground: #FFFFFF;
+  --primary-foreground: #FFF;
   --secondary: #EFF6FF;
   --secondary-foreground: #1D4ED8;
   --muted: #F3F4F6;
@@ -69,6 +69,7 @@
 
 body {
   @apply font-sans;
+
   background: linear-gradient(180deg, #F9FAFB 0%, #EEF2FF 100%);
   min-height: 100vh;
 }
