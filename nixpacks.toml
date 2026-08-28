@@ -1,4 +1,0 @@
-# Railway/nixpacks 构建时需要的系统级依赖
-# better-sqlite3 是原生 C++ 模块，编译需要 Python + C++ 工具链
-[nix]
-packages = ["python3", "gcc", "g++", "make", "pkg-config"]

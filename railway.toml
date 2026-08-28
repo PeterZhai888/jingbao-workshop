@@ -1,9 +1,8 @@
 [build]
-builder = "nixpacks"
-buildCommand = "bash ./scripts/build.sh"
+builder = "dockerfile"
 
 [deploy]
-startCommand = "bash ./scripts/start.sh"
+startCommand = "node dist/server.js"
 healthcheckPath = "/"
 restartPolicyType = "always"
 
