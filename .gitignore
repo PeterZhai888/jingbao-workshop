@@ -12,6 +12,8 @@ __pycache__/
 *.egg-info/
 /.env
 .env
+# 备份的 .env 同样包含密钥，禁止提交
+.env.backup-*
 .cozeproj/reduction
 
 # JS/TS bundlers & build outputs
