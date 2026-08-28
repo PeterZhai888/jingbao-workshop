@@ -10,6 +10,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+# 构建环境变量：
+#   NEXT_TELEMETRY_DISABLED → 关遥测避免网络请求
+#   NEXT_PRIVATE_NTBA_CPUS=4 → 限制收集页面数据的 worker 数（容器 CPU/内存有限时 31 workers 会 OOM）
+ENV NEXT_TELEMETRY_DISABLED=1 \
+    NEXT_PRIVATE_NTBA_CPUS=4 \
+    NODE_OPTIONS="--max-old-space-size=4096"
 
 # 先拷包定义文件再安装（利用 Docker 缓存）
 COPY package.json pnpm-lock.yaml ./
@@ -18,7 +24,10 @@ RUN pnpm install --frozen-lockfile
 
 # 构建 Next.js 与 server bundle（config 必须单独打包，供 startup require）
 COPY . .
-RUN pnpm next build
+# 强制移除 TRAE/Railway 可能在 COPY 时带进 /app/.babelrc（它会被
+# react-dev-inspector 插件利用，在构建期执行代码导致 exit/副作用）
+RUN rm -f /app/.babelrc /app/.babelrc.js /app/babel.config.js /app/babel.config.cjs \
+    && pnpm next build
 RUN pnpm tsup src/server.ts src/lib/server/config.ts --format cjs --platform node --target node20 --outDir dist --no-splitting --no-minify
 # 运行期入口：先做配置校验（JWT_SECRET/DB_PATH）再启动 server，与构建期完全隔离
 RUN cp src/startup.ts dist/startup.js
@@ -27,7 +36,9 @@ RUN cp src/startup.ts dist/startup.js
 FROM node:20-slim AS runner
 
 WORKDIR /app
-ENV NODE_ENV=production
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    NODE_OPTIONS="--max-old-space-size=4096"
 
 # 运行时只需 better-sqlite3 的原生 .node 文件，需要重新装一次完整依赖
 # （上面构建阶段的 node_modules 带完整编译产物，但我们拷 dist/.next 过来）
