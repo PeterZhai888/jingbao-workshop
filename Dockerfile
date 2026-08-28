@@ -16,10 +16,12 @@ COPY package.json pnpm-lock.yaml ./
 RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
 RUN pnpm install --frozen-lockfile
 
-# 构建 Next.js 与 server bundle
+# 构建 Next.js 与 server bundle（config 必须单独打包，供 startup require）
 COPY . .
 RUN pnpm next build
-RUN pnpm tsup src/server.ts --format cjs --platform node --target node20 --outDir dist --no-splitting --no-minify
+RUN pnpm tsup src/server.ts src/lib/server/config.ts --format cjs --platform node --target node20 --outDir dist --no-splitting --no-minify
+# 运行期入口：先做配置校验（JWT_SECRET/DB_PATH）再启动 server，与构建期完全隔离
+RUN cp src/startup.ts dist/startup.js
 
 # --- 运行阶段：更轻量 ---
 FROM node:20-slim AS runner
@@ -41,4 +43,4 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3 make g+
     && pnpm install --frozen-lockfile --prod
 
 EXPOSE 5000
-CMD ["node", "dist/server.js"]
+CMD ["node", "dist/startup.js"]

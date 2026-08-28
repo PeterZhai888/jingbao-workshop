@@ -1,10 +1,10 @@
 import { createServer } from 'http';
 import { parse } from 'url';
 import next from 'next';
-import { validateRuntimeConfig } from '@/lib/server/config';
 
-// 启动期配置校验（构建阶段不会执行这里；环境变量未通过时直接拒绝启动）
-validateRuntimeConfig();
+// 注意：运行期配置校验（JWT_SECRET / DB_PATH）不在此文件内执行，
+// 因为 Next.js 构建阶段会 import server.ts 并通过 babel 插件触发执行，
+// 导致构建期缺少环境变量直接 exit(1)。校验由独立入口 dist/startup.js 负责。
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = process.env.HOSTNAME || 'localhost';

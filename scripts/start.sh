@@ -10,7 +10,8 @@ DEPLOY_RUN_PORT="${DEPLOY_RUN_PORT:-${PORT:-5000}}"
 start_service() {
     cd "${COZE_WORKSPACE_PATH}"
     echo "Starting HTTP service on port ${DEPLOY_RUN_PORT} for deploy..."
-    PORT=${DEPLOY_RUN_PORT} node dist/server.js
+    # startup.js 先运行配置校验（JWT_SECRET/DB_PATH），通过后再 require server.js
+    PORT=${DEPLOY_RUN_PORT} node dist/startup.js
 }
 
 echo "Starting HTTP service on port ${DEPLOY_RUN_PORT} for deploy..."
