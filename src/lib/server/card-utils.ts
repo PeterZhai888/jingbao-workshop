@@ -50,6 +50,15 @@ export function batchGenerateCardCodes(count: number): string[] {
 }
 
 /**
+ * SQLite 时区偏移修饰符（如 '+8 hours' / '-5 hours'），
+ * 用于把 UTC 存储的 created_at 换算到本地时区后再取日期做"当日"分组
+ */
+export function tzModifier(): string {
+  const tz = CONFIG.TZ_OFFSET_HOURS;
+  return `${tz >= 0 ? '+' : ''}${tz} hours`;
+}
+
+/**
  * 基于服务器时间计算今日 00:00（按 TZ_OFFSET 时区）的 ISO 字符串，用于 daily count 分组
  */
 export function todayStartKey(now = new Date()): string {

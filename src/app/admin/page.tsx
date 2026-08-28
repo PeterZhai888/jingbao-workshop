@@ -1155,7 +1155,7 @@ function ConfigPanel({ token }: { token: string }) {
       });
       const data = await res.json();
       if (data.success) {
-        toast.success('API Key 已保存（已加密存储于数据库）');
+        toast.success('API Key 已保存至数据库（生产环境建议改用环境变量注入，避免库文件泄露暴露密钥）');
         setKeyDrafts((d) => ({ ...d, [providerKey]: '' }));
         load();
       } else {

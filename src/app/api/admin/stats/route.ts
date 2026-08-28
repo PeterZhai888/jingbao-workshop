@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { authenticateAdmin } from '@/lib/server/auth';
 import { db } from '@/lib/server/db';
 import { autoExpire } from '@/lib/server/card-service';
-import { todayStartKey } from '@/lib/server/card-utils';
+import { todayStartKey, tzModifier } from '@/lib/server/card-utils';
 
 interface TrendPoint {
   day: string;
@@ -39,8 +39,8 @@ export async function GET(request: NextRequest) {
   // ---- 今日生成量（次数 + 加权消耗）----
   const todayKey = todayStartKey();
   const todayRows = db
-    .prepare(`SELECT detail FROM usage_logs WHERE ${genWhere} AND substr(created_at, 1, 10) = ?`)
-    .all(todayKey) as Array<{ detail: string | null }>;
+    .prepare(`SELECT detail FROM usage_logs WHERE ${genWhere} AND strftime('%Y-%m-%d', created_at, ?) = ?`)
+    .all(tzModifier(), todayKey) as Array<{ detail: string | null }>;
   let todayCost = 0;
   for (const r of todayRows) {
     let cost = 1;
@@ -60,8 +60,8 @@ export async function GET(request: NextRequest) {
   }
   const placeholders = dayKeys.map(() => '?').join(',');
   const trendRows = db
-    .prepare(`SELECT detail, substr(created_at, 1, 10) AS day FROM usage_logs WHERE ${genWhere} AND substr(created_at, 1, 10) IN (${placeholders})`)
-    .all(...dayKeys) as Array<{ detail: string | null; day: string }>;
+    .prepare(`SELECT detail, strftime('%Y-%m-%d', created_at, ?) AS day FROM usage_logs WHERE ${genWhere} AND strftime('%Y-%m-%d', created_at, ?) IN (${placeholders})`)
+    .all(tzModifier(), tzModifier(), ...dayKeys) as Array<{ detail: string | null; day: string }>;
   const trendMap = new Map<string, TrendPoint>(dayKeys.map((d) => [d, { day: d, count: 0, cost: 0 }]));
   for (const r of trendRows) {
     let cost = 1;

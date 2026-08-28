@@ -2,6 +2,7 @@
 // 配置存 system_config：service_paused / global_daily_limit
 import { db } from './db';
 import { CONFIG } from './config';
+import { tzModifier } from './card-utils';
 
 function getConfig(key: string): string | null {
   try {
@@ -40,13 +41,14 @@ export function checkGlobalGuard(): GuardResult {
   // 全局每日上限（0 或未配置 = 不限制）
   const limit = parseInt(getConfig('global_daily_limit') || '0', 10);
   if (limit > 0) {
+    // created_at 为 UTC 存储，先偏移到本地时区再取日期，与卡密侧口径一致
     const row = db
       .prepare(
         `SELECT COUNT(*) AS c FROM usage_logs
          WHERE action IN ('titles', 'storyboard') AND success = 1
-           AND created_at >= ? || ' 00:00:00' AND created_at <= ? || ' 23:59:59'`,
+           AND strftime('%Y-%m-%d', created_at, ?) = ?`,
       )
-      .get(today(), today()) as { c: number };
+      .get(tzModifier(), today()) as { c: number };
     if (row.c >= limit) {
       return {
         ok: false,

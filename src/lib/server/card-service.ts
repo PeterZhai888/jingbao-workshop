@@ -2,7 +2,7 @@
 
 import { db, CardRow, CardStatus } from '@/lib/server/db';
 import { CONFIG } from '@/lib/server/config';
-import { todayStartKey } from '@/lib/server/card-utils';
+import { todayStartKey, tzModifier } from '@/lib/server/card-utils';
 
 /**
  * 统一更新过期状态：任何查询/操作前把过了期的 active 置为 expired
@@ -61,7 +61,8 @@ export function touchCardUsage(cardId: number, ip: string, fingerprint: string):
   ).run(ip, fingerprint, cardId);
 }
 
-/** 查当日已用次数（基于服务器时区今日；按模型档位成本加权，detail.cost 为空算 1 次） */
+/** 查当日已用次数（基于配置时区当日；按模型档位成本加权，detail.cost 为空算 1 次）
+ *  created_at 为 UTC 存储，比较前先用 strftime 偏移到本地时区取日期，避免凌晨时段跨日错账 */
 export function getDailyUsed(cardId: number): number {
   const dayKey = todayStartKey();
   const rows = db
@@ -70,9 +71,9 @@ export function getDailyUsed(cardId: number): number {
        WHERE card_id = ?
          AND success = 1
          AND action IN ('storyboard', 'titles')
-         AND substr(created_at, 1, 10) = ?`,
+         AND strftime('%Y-%m-%d', created_at, ?) = ?`,
     )
-    .all(cardId, dayKey) as Array<{ detail: string | null }>;
+    .all(cardId, tzModifier(), dayKey) as Array<{ detail: string | null }>;
   return rows.reduce((sum, r) => {
     let cost = 1;
     if (r.detail) {

@@ -5,6 +5,7 @@ import {
   touchCardUsage,
   saveGeneratedHistory,
   getExhaustedTip,
+  getDailyUsed,
 } from '@/lib/server/card-service';
 import { callAI, extractJSON, PROVIDER_KEYS, getModelCost } from '@/lib/server/ai-provider';
 import type { ProviderKey } from '@/lib/server/ai-provider';
@@ -183,6 +184,24 @@ export async function POST(request: NextRequest) {
         fallback: { shots: fallbackShots(text), note: '以下为基础模板分镜（本次不消耗次数），稍后可重新生成' },
       },
       { status: 503 },
+    );
+  }
+
+  // 并发兜底：AI 耗时期间其他请求可能已把当日次数用完，写入成功日志（扣次）前复核
+  if (getDailyUsed(cardId!) + cost > dailyLimit!) {
+    writeUsageLog({
+      cardId: cardId!,
+      cardCode: cardCode!,
+      action: 'storyboard',
+      success: false,
+      ip,
+      userAgent,
+      fingerprint,
+      detail: 'DAILY_LIMIT_RACE',
+    });
+    return NextResponse.json(
+      { success: false, code: 'DAILY_LIMIT', error: '今日AI生成次数已用完，请明天再来', tip: getExhaustedTip() },
+      { status: 429 },
     );
   }
 

@@ -52,6 +52,8 @@ output.log
 *.log
 *.log.*
 logs/
+# 例外：API 路由目录 src/app/api/admin/logs/ 不属于日志文件
+!src/app/api/admin/logs/
 
 # 视频文件
 *.mp4
