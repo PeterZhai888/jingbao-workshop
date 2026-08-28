@@ -85,6 +85,18 @@ export function getDailyUsed(cardId: number): number {
   }, 0);
 }
 
+/** 次数用尽引导文案（后台 system_config.exhausted_tip 配置，空 = 不提示） */
+export function getExhaustedTip(): string {
+  try {
+    const row = db.prepare('SELECT value FROM system_config WHERE key = ?').get('exhausted_tip') as
+      | { value: string }
+      | undefined;
+    return (row?.value || '').trim();
+  } catch {
+    return '';
+  }
+}
+
 /** 同一卡密近 60 秒的请求数（用于防刷） */
 export function getRecentMinuteCalls(cardId: number): number {
   const row = db

@@ -81,7 +81,8 @@ export function StoryboardTool() {
       return;
     }
     if (session && session.dailyUsed + model.cost > session.dailyLimit) {
-      toast.error(session.dailyUsed >= session.dailyLimit ? '今日次数已用完，请明天再来哦' : `剩余次数不足（本次需消耗${model.cost}次），请更换低档位模型`);
+      const base = session.dailyUsed >= session.dailyLimit ? '今日次数已用完，请明天再来哦' : `剩余次数不足（本次需消耗${model.cost}次），请更换低档位模型`;
+      toast.error(session.exhaustedTip ? `${base}\n${session.exhaustedTip}` : base, { duration: session.exhaustedTip ? 6000 : 4000 });
       return;
     }
     setLoading(true);
@@ -114,6 +115,11 @@ export function StoryboardTool() {
             setResult(data.fallback.shots as StoryboardShot[]);
             setResultMeta({ id: 'fallback', title: '基础模板分镜（AI繁忙降级，本次不扣次数）' });
             toast.warning('AI服务繁忙，已展示基础模板（本次不消耗次数），请稍后重试');
+            return;
+          }
+          // 次数用尽：附带后台配置的引导文案
+          if (data.code === 'DAILY_LIMIT' && data.tip) {
+            toast.error(`${data.error}\n${data.tip}`, { duration: 6000 });
             return;
           }
           toast.error(data.error || '生成失败，请稍后再试');
@@ -334,6 +340,17 @@ export function StoryboardTool() {
             </div>
             {result && (
               <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleGenerate(false)}
+                  disabled={loading || !inputText.trim()}
+                  className="gap-1.5 h-9"
+                  title="用当前文案和模型重新生成"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  重新生成
+                </Button>
                 <Button size="sm" variant="outline" onClick={handleCopy} className="gap-1.5 h-9">
                   {copied ? <CheckCircle2 className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
                   {copied ? '已复制' : '复制'}
@@ -406,8 +423,8 @@ export function StoryboardTool() {
                 </TabsContent>
 
                 <TabsContent value="table" className="mt-0">
-                  <div className="rounded-xl border border-border/60 overflow-hidden">
-                    <Table>
+                  <div className="rounded-xl border border-border/60 overflow-x-auto">
+                    <Table className="min-w-[560px]">
                       <TableHeader>
                         <TableRow>
                           <TableHead className="w-16">镜头</TableHead>

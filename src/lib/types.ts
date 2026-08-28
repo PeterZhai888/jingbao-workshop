@@ -17,6 +17,8 @@ export interface AuthSession {
   dailyUsed: number;
   dailyLimit: number;
   cardExpiresAt: string;
+  /** 次数用尽引导文案（后台可配置，空 = 不提示） */
+  exhaustedTip?: string;
 }
 
 export interface StoryboardShot {

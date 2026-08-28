@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateCard } from '@/lib/server/auth';
-import { getDailyUsed } from '@/lib/server/card-service';
+import { getDailyUsed, getExhaustedTip } from '@/lib/server/card-service';
 
 export function GET(request: NextRequest) {
   const auth = authenticateCard(request);
@@ -16,5 +16,7 @@ export function GET(request: NextRequest) {
     success: true,
     dailyUsed,
     dailyLimit: auth.dailyLimit,
+    // 次数用尽引导文案（后台可配置，空 = 不提示）
+    exhaustedTip: getExhaustedTip(),
   });
 }

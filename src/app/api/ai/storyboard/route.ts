@@ -4,6 +4,7 @@ import {
   writeUsageLog,
   touchCardUsage,
   saveGeneratedHistory,
+  getExhaustedTip,
 } from '@/lib/server/card-service';
 import { callAI, extractJSON, PROVIDER_KEYS, getModelCost } from '@/lib/server/ai-provider';
 import type { ProviderKey } from '@/lib/server/ai-provider';
@@ -60,7 +61,7 @@ export async function POST(request: NextRequest) {
       detail: 'DAILY_LIMIT',
     });
     return NextResponse.json(
-      { success: false, code: 'DAILY_LIMIT', error: '今日AI生成次数已用完，请明天再来' },
+      { success: false, code: 'DAILY_LIMIT', error: '今日AI生成次数已用完，请明天再来', tip: getExhaustedTip() },
       { status: 429 },
     );
   }
@@ -114,7 +115,7 @@ export async function POST(request: NextRequest) {
       detail: 'DAILY_LIMIT',
     });
     return NextResponse.json(
-      { success: false, code: 'DAILY_LIMIT', error: `今日剩余次数不足以完成本次生成（需${cost}次），请更换低档位模型或明天再来` },
+      { success: false, code: 'DAILY_LIMIT', error: `今日剩余次数不足以完成本次生成（需${cost}次），请更换低档位模型或明天再来`, tip: getExhaustedTip() },
       { status: 429 },
     );
   }

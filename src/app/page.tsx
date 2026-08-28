@@ -147,7 +147,7 @@ export default function HomePage() {
                     </div>
                     <div className="rounded-lg bg-slate-50 p-2.5 border-l-2 border-fuchsia-400">
                       <div className="font-semibold text-xs">镜头 2 · 5秒 · 固定</div>
-                      <div className="text-muted-foreground text-xs mt-1">特写咖啡拉花，配旁白："一天的美好，从这杯开始"</div>
+                      <div className="text-muted-foreground text-xs mt-1">特写咖啡拉花，配旁白：&ldquo;一天的美好，从这杯开始&rdquo;</div>
                     </div>
                   </div>
                 </div>

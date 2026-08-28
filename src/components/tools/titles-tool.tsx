@@ -65,7 +65,8 @@ export function TitlesTool() {
       return;
     }
     if (session && session.dailyUsed + model.cost > session.dailyLimit) {
-      toast.error(session.dailyUsed >= session.dailyLimit ? '今日次数已用完，请明天再来哦' : `剩余次数不足（本次需消耗${model.cost}次），请更换低档位模型`);
+      const base = session.dailyUsed >= session.dailyLimit ? '今日次数已用完，请明天再来哦' : `剩余次数不足（本次需消耗${model.cost}次），请更换低档位模型`;
+      toast.error(session.exhaustedTip ? `${base}\n${session.exhaustedTip}` : base, { duration: session.exhaustedTip ? 6000 : 4000 });
       return;
     }
     setLoading(true);
@@ -97,6 +98,11 @@ export function TitlesTool() {
             setTitles(data.fallback.titles as string[]);
             setMeta({ id: 'fallback', topic: '基础模板标题（AI繁忙降级，本次不扣次数）' });
             toast.warning('AI服务繁忙，已展示基础模板（本次不消耗次数），请稍后重试');
+            return;
+          }
+          // 次数用尽：附带后台配置的引导文案
+          if (data.code === 'DAILY_LIMIT' && data.tip) {
+            toast.error(`${data.error}\n${data.tip}`, { duration: 6000 });
             return;
           }
           toast.error(data.error || '生成失败，请稍后再试');
@@ -231,10 +237,23 @@ export function TitlesTool() {
             </CardDescription>
           </div>
           {titles && (
-            <Button size="sm" variant="outline" onClick={handleCopyAll} className="gap-1.5 h-9">
-              <Copy className="h-4 w-4" />
-              复制全部
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleGenerate(false)}
+                disabled={loading || !topic.trim()}
+                className="gap-1.5 h-9"
+                title="用当前主题和模型重新生成一批"
+              >
+                <RefreshCw className="h-4 w-4" />
+                重新生成
+              </Button>
+              <Button size="sm" variant="outline" onClick={handleCopyAll} className="gap-1.5 h-9">
+                <Copy className="h-4 w-4" />
+                复制全部
+              </Button>
+            </div>
           )}
         </CardHeader>
         <CardContent>

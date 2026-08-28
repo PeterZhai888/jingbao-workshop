@@ -5,7 +5,7 @@ import { CONFIG } from '@/lib/server/config';
 import { listProviders, PROVIDER_KEYS } from '@/lib/server/ai-provider';
 import { isUsingFallbackJwtSecret } from '@/lib/server/config';
 
-type ConfKey = 'default_provider' | 'daily_limit' | 'qps_limit' | 'tier_access' | 'service_paused' | 'global_daily_limit' | `ai_key_${string}`;
+type ConfKey = 'default_provider' | 'daily_limit' | 'qps_limit' | 'tier_access' | 'service_paused' | 'global_daily_limit' | 'exhausted_tip' | `ai_key_${string}`;
 
 export function GET(request: NextRequest) {
   const auth = authenticateAdmin(request);
@@ -30,6 +30,8 @@ export function GET(request: NextRequest) {
       servicePaused: map.service_paused === '1',
       globalDailyLimit: parseInt(map.global_daily_limit || '0', 10),
     },
+    // 次数用尽引导文案（空 = 不提示）
+    exhaustedTip: map.exhausted_tip || '',
     // 安全状态：JWT 密钥仍在用开发默认值时提醒（生产模式会在服务端拒绝启动，此标记主要覆盖开发/预览环境）
     security: {
       usingFallbackJwtSecret: isUsingFallbackJwtSecret,
@@ -90,6 +92,13 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: '参数非法: global_daily_limit' }, { status: 400 });
       }
       write.run(key, String(n));
+    } else if (key === 'exhausted_tip') {
+      // 次数用尽引导文案：展示在用户端“今日次数已用完”提示后（空 = 不提示）
+      const v = String(raw ?? '').trim();
+      if (v.length > 200) {
+        return NextResponse.json({ success: false, error: '引导文案不能超过200字' }, { status: 400 });
+      }
+      write.run(key, v);
     } else if (key.startsWith('ai_key_')) {
       // 在线填写某家提供商的 API Key（如 ai_key_deepseek）
       const provider = key.slice('ai_key_'.length);

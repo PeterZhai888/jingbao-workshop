@@ -112,7 +112,7 @@ export function CardAuthProvider({ children }: { children: ReactNode }) {
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        setSession(prev => prev ? { ...prev, dailyUsed: data.dailyUsed, dailyLimit: data.dailyLimit } : prev);
+        setSession(prev => prev ? { ...prev, dailyUsed: data.dailyUsed, dailyLimit: data.dailyLimit, exhaustedTip: typeof data.exhaustedTip === 'string' ? data.exhaustedTip : prev.exhaustedTip } : prev);
         // 同步到 localStorage
         const stored = localStorage.getItem(STORAGE_KEY);
         if (stored) {
@@ -120,6 +120,7 @@ export function CardAuthProvider({ children }: { children: ReactNode }) {
             const parsed = JSON.parse(stored);
             parsed.dailyUsed = data.dailyUsed;
             parsed.dailyLimit = data.dailyLimit;
+            if (typeof data.exhaustedTip === 'string') parsed.exhaustedTip = data.exhaustedTip;
             localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
           } catch { /* ignore */ }
         }

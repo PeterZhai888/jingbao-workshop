@@ -65,6 +65,7 @@ import {
   Cpu,
   Trash2,
   ShieldAlert,
+  MessageCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -879,6 +880,7 @@ interface ConfigData {
   dailyLimit: number;
   qpsLimit: number;
   tierAccess: string;
+  exhaustedTip?: string;
 }
 
 /** 运行护栏（紧急暂停 + 全局每日上限） */
@@ -1036,6 +1038,9 @@ function ConfigPanel({ token }: { token: string }) {
   // 运行护栏
   const [guard, setGuard] = useState<GuardConfig>({ servicePaused: false, globalDailyLimit: 0 });
   const [guardSaving, setGuardSaving] = useState(false);
+  // 次数用尽引导文案
+  const [exhaustedTip, setExhaustedTip] = useState('');
+  const [tipSaving, setTipSaving] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1047,6 +1052,7 @@ function ConfigPanel({ token }: { token: string }) {
         setProviders(data.providers || []);
         setUsingFallbackJwtSecret(!!data.security?.usingFallbackJwtSecret);
         if (data.guard) setGuard(data.guard);
+        setExhaustedTip(data.exhaustedTip || '');
       }
     } catch {
       toast.error('加载配置失败');
@@ -1110,6 +1116,28 @@ function ConfigPanel({ token }: { token: string }) {
       toast.error('网络错误');
     } finally {
       setGuardSaving(false);
+    }
+  };
+
+  // 保存次数用尽引导文案
+  const handleSaveTip = async () => {
+    setTipSaving(true);
+    try {
+      const res = await fetch('/api/admin/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...withAuth(token) },
+        body: JSON.stringify({ exhausted_tip: exhaustedTip.trim() }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success('引导文案已保存');
+      } else {
+        toast.error(data.error || '保存失败');
+      }
+    } catch {
+      toast.error('网络错误');
+    } finally {
+      setTipSaving(false);
     }
   };
 
@@ -1304,6 +1332,35 @@ function ConfigPanel({ token }: { token: string }) {
         </CardContent>
       </Card>
 
+      {/* 次数用尽引导文案 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <MessageCircle className="h-5 w-5 text-sky-500" /> 次数用尽引导文案
+          </CardTitle>
+          <CardDescription>
+            用户当日生成次数用完时，在错误提示后展示的引导内容（如加微信续费、明日再来等）；留空则不展示
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Textarea
+            placeholder="例如：想继续生成？添加客服微信 xxxxxx 获取新卡密，或明天再来免费使用～"
+            value={exhaustedTip}
+            onChange={(e) => setExhaustedTip(e.target.value.slice(0, 200))}
+            className="min-h-[80px] resize-y text-sm"
+          />
+          <div className="flex items-center justify-between">
+            <span className={`text-xs ${exhaustedTip.length > 190 ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
+              {exhaustedTip.length}/200 字
+            </span>
+            <Button onClick={handleSaveTip} disabled={tipSaving} className="gap-1.5">
+              {tipSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+              保存文案
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* AI 服务商配置 */}
       <Card>
         <CardHeader>
@@ -1391,27 +1448,60 @@ function ConfigPanel({ token }: { token: string }) {
 }
 
 // ========= 后台主界面 =========
+interface StatsData {
+  cardsTotal: number;
+  activeCards: number;
+  logsTotal: number;
+  todayGen: number;
+  todayCost: number;
+  trend7d: Array<{ day: string; count: number; cost: number }>;
+  tierRatio: Array<{ cost: number; count: number }>;
+  remarkStats: Array<{
+    remark: string;
+    total: number;
+    unused: number;
+    active: number;
+    frozen: number;
+    revoked: number;
+    expired: number;
+  }>;
+}
+
+// 档位消耗分桶展示（cost = 单次消耗次数）
+const TIER_BUCKET_META: Record<number, { label: string; barCls: string }> = {
+  1: { label: '⚡ 极速/标准版（1次）', barCls: 'bg-emerald-500' },
+  2: { label: '💎 高质量版（2次）', barCls: 'bg-sky-500' },
+  3: { label: '👑 旗舰版（3次）', barCls: 'bg-amber-500' },
+};
+
 function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout: () => void }) {
   const [tab, setTab] = useState<'cards' | 'logs' | 'config'>('cards');
-  const [stats, setStats] = useState<{ cards: number | null; logs: number | null }>({ cards: null, logs: null });
+  const [stats, setStats] = useState<StatsData | null>(null);
+
+  const loadStats = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/stats', { headers: withAuth(session.token) });
+      const data = await res.json();
+      if (data.success) {
+        setStats({
+          cardsTotal: data.cardsTotal,
+          activeCards: data.activeCards,
+          logsTotal: data.logsTotal,
+          todayGen: data.todayGen,
+          todayCost: data.todayCost,
+          trend7d: data.trend7d || [],
+          tierRatio: data.tierRatio || [],
+          remarkStats: data.remarkStats || [],
+        });
+      }
+    } catch {
+      // 静默失败，看板显示 —
+    }
+  }, [session.token]);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const headers = withAuth(session.token);
-        const [cardsRes, logsRes] = await Promise.all([
-          fetch('/api/admin/cards?page=1&pageSize=1', { headers }),
-          fetch('/api/admin/logs?page=1&pageSize=1', { headers }),
-        ]);
-        const cards = await cardsRes.json();
-        const logs = await logsRes.json();
-        if (cards?.success) setStats((s) => ({ ...s, cards: cards.total }));
-        if (logs?.success) setStats((s) => ({ ...s, logs: logs.total }));
-      } catch {
-        // 静默失败，看板显示 —
-      }
-    })();
-  }, [session.token]);
+    loadStats();
+  }, [loadStats]);
 
   const tabs = [
     { key: 'cards' as const, label: '卡密管理', icon: CreditCard },
@@ -1419,23 +1509,142 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
     { key: 'config' as const, label: '系统配置', icon: Settings },
   ];
 
+  const trendMax = Math.max(1, ...(stats?.trend7d || []).map((t) => t.count));
+  const tierTotal = (stats?.tierRatio || []).reduce((s, t) => s + t.count, 0);
+
   return (
     <div className="space-y-6">
-      {/* 简版看板 */}
-      <div className="grid sm:grid-cols-2 gap-4">
+      {/* 运营看板：核心指标 */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="border-border/60">
           <CardHeader className="pb-2">
-            <CardDescription>卡密总数</CardDescription>
-            <CardTitle className="text-3xl font-bold text-primary">{stats.cards ?? '—'}</CardTitle>
+            <CardDescription>卡密总数 / 激活中</CardDescription>
+            <CardTitle className="text-3xl font-bold text-primary">
+              {stats ? stats.cardsTotal : '—'}
+              <span className="text-base font-medium text-muted-foreground ml-1.5">/ {stats ? stats.activeCards : '—'}</span>
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        <Card className="border-border/60">
+          <CardHeader className="pb-2">
+            <CardDescription>今日生成次数</CardDescription>
+            <CardTitle className="text-3xl font-bold text-fuchsia-500">{stats ? stats.todayGen : '—'}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card className="border-border/60">
+          <CardHeader className="pb-2">
+            <CardDescription>今日消耗额度</CardDescription>
+            <CardTitle className="text-3xl font-bold text-amber-500">{stats ? stats.todayCost : '—'}</CardTitle>
           </CardHeader>
         </Card>
         <Card className="border-border/60">
           <CardHeader className="pb-2">
             <CardDescription>使用日志总数</CardDescription>
-            <CardTitle className="text-3xl font-bold text-fuchsia-500">{stats.logs ?? '—'}</CardTitle>
+            <CardTitle className="text-3xl font-bold text-sky-500">{stats ? stats.logsTotal : '—'}</CardTitle>
           </CardHeader>
         </Card>
       </div>
+
+      {/* 趋势 + 档位占比 */}
+      <div className="grid lg:grid-cols-5 gap-4">
+        <Card className="lg:col-span-3 border-border/60">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">近 7 天生成趋势</CardTitle>
+            <CardDescription>按日成功生成次数（标题 + 分镜）</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {stats && stats.trend7d.length > 0 ? (
+              <div className="flex items-end justify-between gap-2 h-36 pt-2">
+                {stats.trend7d.map((t) => (
+                  <div key={t.day} className="flex-1 flex flex-col items-center gap-1.5 min-w-0">
+                    <span className="text-xs font-medium text-foreground/80">{t.count}</span>
+                    <div className="w-full max-w-10 bg-muted rounded-t-md overflow-hidden flex items-end h-20">
+                      <div
+                        className="w-full bg-gradient-to-t from-primary/70 to-primary rounded-t-md transition-all"
+                        style={{ height: `${Math.max(t.count > 0 ? 8 : 2, Math.round((t.count / trendMax) * 100))}%` }}
+                        title={`${t.day}：${t.count} 次 / 消耗 ${t.cost}`}
+                      />
+                    </div>
+                    <span className="text-[10px] text-muted-foreground whitespace-nowrap">{t.day.slice(5)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="py-8 text-center text-sm text-muted-foreground">暂无数据</p>
+            )}
+          </CardContent>
+        </Card>
+        <Card className="lg:col-span-2 border-border/60">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">档位消耗占比（近 7 天）</CardTitle>
+            <CardDescription>按单次消耗次数分桶的生成次数占比</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {stats && stats.tierRatio.length > 0 ? (
+              stats.tierRatio.map((t) => {
+                const meta = TIER_BUCKET_META[t.cost] || { label: `${t.cost} 次档`, barCls: 'bg-slate-400' };
+                const pct = tierTotal > 0 ? Math.round((t.count / tierTotal) * 100) : 0;
+                return (
+                  <div key={t.cost} className="space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-medium">{meta.label}</span>
+                      <span className="text-muted-foreground">{t.count} 次 · {pct}%</span>
+                    </div>
+                    <div className="h-2.5 rounded-full bg-muted overflow-hidden">
+                      <div className={`h-full rounded-full ${meta.barCls}`} style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <p className="py-8 text-center text-sm text-muted-foreground">暂无数据</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* 渠道/批次统计（按备注分组） */}
+      {stats && stats.remarkStats.length > 0 && (
+        <Card className="border-border/60">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <CreditCard className="h-4 w-4 text-primary" />
+              渠道 / 批次统计（按备注分组）
+            </CardTitle>
+            <CardDescription>生成卡密时填写的备注可作为渠道/批次标识，此处按备注汇总各状态数量</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-xl border border-border/60 overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>备注（渠道/批次）</TableHead>
+                    <TableHead className="text-right">总数</TableHead>
+                    <TableHead className="text-right">未激活</TableHead>
+                    <TableHead className="text-right">激活中</TableHead>
+                    <TableHead className="text-right">已冻结</TableHead>
+                    <TableHead className="text-right">已作废</TableHead>
+                    <TableHead className="text-right">已过期</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {stats.remarkStats.map((r) => (
+                    <TableRow key={r.remark}>
+                      <TableCell className="font-medium max-w-[220px] truncate" title={r.remark}>{r.remark}</TableCell>
+                      <TableCell className="text-right font-bold text-primary">{r.total}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{r.unused}</TableCell>
+                      <TableCell className="text-right text-emerald-600">{r.active}</TableCell>
+                      <TableCell className="text-right text-sky-600">{r.frozen}</TableCell>
+                      <TableCell className="text-right text-rose-600">{r.revoked}</TableCell>
+                      <TableCell className="text-right text-amber-600">{r.expired}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* 功能 Tab */}
       <div className="flex gap-1.5 overflow-x-auto pb-1">

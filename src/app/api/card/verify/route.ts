@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCardByCode, isCardUsable, activateCard, writeUsageLog, touchCardUsage, getDailyUsed } from '@/lib/server/card-service';
+import { getCardByCode, isCardUsable, activateCard, writeUsageLog, touchCardUsage, getDailyUsed, getExhaustedTip } from '@/lib/server/card-service';
 import { getClientIP, uaFingerprint } from '@/lib/server/card-utils';
 import { signToken } from '@/lib/server/jwt';
 import { CONFIG } from '@/lib/server/config';
@@ -83,6 +83,8 @@ export async function POST(request: NextRequest) {
       dailyLimit: fresh.daily_limit,
       cardExpiresAt: fresh.expires_at,
       fingerprint,
+      // 次数用尽引导文案（后台可配置，空 = 不提示）
+      exhaustedTip: getExhaustedTip(),
     },
   });
 }
