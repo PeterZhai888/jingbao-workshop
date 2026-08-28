@@ -1,6 +1,10 @@
 import { createServer } from 'http';
 import { parse } from 'url';
 import next from 'next';
+import { validateRuntimeConfig } from '@/lib/server/config';
+
+// 启动期配置校验（构建阶段不会执行这里；环境变量未通过时直接拒绝启动）
+validateRuntimeConfig();
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = process.env.HOSTNAME || 'localhost';
