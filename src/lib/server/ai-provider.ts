@@ -34,6 +34,10 @@ const PROVIDERS: Record<ProviderKey, ProviderDef> = {
     baseURL: 'https://api.deepseek.com/v1',
     model: 'deepseek-chat',
     envKey: 'DEEPSEEK_API_KEY',
+    // 兼容部署文档宣传的通用变量名（LLM_API_KEY/LLM_BASE_URL/LLM_MODEL）：
+    // .env.example 一直让用户填 LLM_API_KEY，但此前代码从未读取，导致部署后 AI 全部报"服务繁忙"
+    envBaseURL: 'LLM_BASE_URL',
+    envModel: 'LLM_MODEL',
   },
   hunyuan: {
     key: 'hunyuan', label: '腾讯混元',
@@ -145,7 +149,10 @@ function resolveOne(key: ProviderKey, model?: string): ResolvedProvider | null {
   if (!def) return null;
   const keyFromDb = getSystemConfig(`ai_key_${def.key}`);
   // 库中 Key 可能是 AES-256-GCM 密文（enc:v1: 前缀）或历史明文，decryptSecret 均兼容
-  const apiKey = (keyFromDb ? decryptSecret(keyFromDb) : '') || process.env[def.envKey] || '';
+  // deepseek 额外兼容通用变量 LLM_API_KEY（部署文档推荐的填法）
+  const envApiKey =
+    process.env[def.envKey] || (key === 'deepseek' && process.env.LLM_API_KEY) || '';
+  const apiKey = (keyFromDb ? decryptSecret(keyFromDb) : '') || envApiKey || '';
   if (!apiKey) return null;
   const baseURL = (def.envBaseURL && process.env[def.envBaseURL]) || def.baseURL;
   // 用户指定模型必须在目录白名单内；未指定走后台配置/默认
@@ -182,6 +189,8 @@ export function listProviders() {
   return (Object.keys(PROVIDERS) as ProviderKey[]).map((k) => {
     const def = PROVIDERS[k];
     const keyFromDb = getSystemConfig(`ai_key_${def.key}`);
+    const envApiKey =
+      process.env[def.envKey] || (k === 'deepseek' && process.env.LLM_API_KEY) || '';
     const currentModel = (def.envModel && process.env[def.envModel]) || getSystemConfig(`ai_model_${def.key}`) || def.model;
     return {
       key: def.key,
@@ -191,8 +200,8 @@ export function listProviders() {
       // 当前模型是否来自后台自定义（非预设清单内 → 自定义；或存了 ai_model_ 也算自定义选择）
       modelCustom: !!getSystemConfig(`ai_model_${def.key}`) && !MODEL_CATALOG[k].some((m) => m.id === currentModel),
       models: MODEL_CATALOG[k],
-      configured: !!(keyFromDb || process.env[def.envKey]),
-      configuredFrom: keyFromDb ? '后台配置' : (process.env[def.envKey] ? '环境变量' : '未配置'),
+      configured: !!(keyFromDb || envApiKey),
+      configuredFrom: keyFromDb ? '后台配置' : (envApiKey ? '环境变量' : '未配置'),
     };
   });
 }
@@ -223,7 +232,7 @@ export function listUserModels() {
   const defaultProvider = (getSystemConfig('default_provider') as ProviderKey | null) || 'qwen';
   const providers = PROVIDER_KEYS.filter((k) => {
     const def = PROVIDERS[k];
-    return !!(getSystemConfig(`ai_key_${def.key}`) || process.env[def.envKey]);
+    return !!(getSystemConfig(`ai_key_${def.key}`) || process.env[def.envKey] || (k === 'deepseek' && process.env.LLM_API_KEY));
   });
   return {
     tierAccess: access,

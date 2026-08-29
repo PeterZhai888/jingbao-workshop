@@ -151,7 +151,9 @@ export async function POST(request: NextRequest) {
       {
         success: false,
         code: 'AI_BUSY',
-        error: 'AI服务繁忙，请稍后再试',
+        error: ai.error === 'AI_PROVIDER_NOT_CONFIGURED'
+          ? 'AI 服务尚未配置 API Key，请联系管理员在后台或环境变量中配置'
+          : 'AI服务繁忙，请稍后再试',
         fallback: { titles: fallbackTitles(topic), note: '以下为基础模板标题（本次不消耗次数），稍后可重新生成' },
       },
       { status: 503 },

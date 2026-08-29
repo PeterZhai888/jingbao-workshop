@@ -115,7 +115,7 @@ export function StoryboardTool() {
           if (data.code === 'AI_BUSY' && data.fallback?.shots) {
             setResult(data.fallback.shots as StoryboardShot[]);
             setResultMeta({ id: 'fallback', title: '基础模板分镜（AI繁忙降级，本次不扣次数）' });
-            toast.warning('AI服务繁忙，已展示基础模板（本次不消耗次数），请稍后重试');
+            toast.warning(data.error || 'AI服务繁忙，已展示基础模板（本次不消耗次数），请稍后重试');
             return;
           }
           // 次数用尽：附带后台配置的引导文案
