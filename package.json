@@ -101,9 +101,5 @@
   "packageManager": "pnpm@9.0.0",
   "engines": {
     "pnpm": ">=9.0.0"
-  },
-  "nixpacks": {
-    "aptPackages": ["build-essential", "python3"],
-    "start": "NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 NODE_OPTIONS='--max-old-space-size=512' node dist/startup.js"
   }
 }
