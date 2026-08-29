@@ -4,7 +4,7 @@
   "steps": {
     "install": {
       "commands": [
-        "pnpm add -g node-gyp@10",
+        "npm install -g node-gyp@10",
         "pnpm install --frozen-lockfile --prefer-offline"
       ]
     }
