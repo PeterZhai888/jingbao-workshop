@@ -41,7 +41,7 @@ const PROVIDERS: Record<ProviderKey, ProviderDef> = {
   },
   hunyuan: {
     key: 'hunyuan', label: '腾讯混元',
-    baseURL: 'https://api.hunyuan.cloud.tencent.com/v1',
+    baseURL: 'https://api.hunyuan.tencentcloud.com/v1',
     model: 'hunyuan-lite',
     envKey: 'HUNYUAN_API_KEY',
   },
