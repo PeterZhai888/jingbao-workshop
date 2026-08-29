@@ -9,13 +9,32 @@ import bcrypt from 'bcryptjs';
 // 若顶层有 I/O/副作用，会：1) 在构建器用户权限下打开真实 DB 并写入失败；2) 建默认管理员触发约束冲突。
 // 因此把所有副作用都放到 initializeDatabase() 里，由 startup.js 在运行期显式调用。
 
-/** lazy 数据库实例：在 initializeDatabase() 执行前访问会抛错（故意），保证构建期 import 不碰 DB */
-let _db: Database.Database | null = null;
+/**
+ * DB 实例存放在 globalThis 上：生产环境中 Next 构建的 API 路由 chunk 与
+ * tsup 打包的 dist/server.js 各持有一份本模块副本（模块状态不互通），
+ * 只有全局对象才能让所有副本共享同一个 DB 实例。
+ * getDb() 支持惰性自动初始化：任何副本首次访问时若未建库则自动初始化。
+ */
+const DB_GLOBAL_KEY = Symbol.for('jingbao.db.instance');
+const DB_INIT_GLOBAL_KEY = Symbol.for('jingbao.db.initialized');
+
+type DbGlobal = typeof globalThis & {
+  [DB_GLOBAL_KEY]?: Database.Database;
+  [DB_INIT_GLOBAL_KEY]?: boolean;
+};
+const dbGlobal = globalThis as DbGlobal;
+
 const getDb = (): Database.Database => {
-  if (!_db) {
-    throw new Error('[DB] 数据库尚未初始化，请先调用 initializeDatabase()');
+  if (!dbGlobal[DB_GLOBAL_KEY]) {
+    // 该模块副本尚未拿到 DB 实例（典型场景：API 路由 chunk 与 server.js 是两份模块副本）
+    // 惰性自动初始化，保证任何入口进来都能用
+    initializeDatabase({ quiet: true });
   }
-  return _db;
+  const instance = dbGlobal[DB_GLOBAL_KEY];
+  if (!instance) {
+    throw new Error('[DB] 数据库初始化失败，无法获取实例');
+  }
+  return instance;
 };
 
 /** 对外导出 getter：调用方（API route / card-service）读的时候会拿实际 DB 实例 */
@@ -42,18 +61,20 @@ export const db = new Proxy<Database.Database>({} as Database.Database, {
 const BACKUP_KEEP_COUNT = 30;
 const BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 let _backupInterval: ReturnType<typeof setInterval> | null = null;
-let _initialized = false;
+// 本模块副本内的工作引用（真正共享的实例在 dbGlobal 上）
+let _db: Database.Database | null = null;
 
 /**
  * 运行期调用：在启动 HTTP server 之前执行。
  *   顺序：validateRuntimeConfig (JWT) → initializeDatabase (建库建表建管理员) → 启动 server
+ *   也可由 getDb() 惰性触发（API 路由副本首次访问时自动初始化）。
  * @param options.quiet 构建期（比如 warmup）调用时，避免 console 输出
  */
 export function initializeDatabase(options?: { quiet?: boolean }): void {
   const log = (msg: string) => !options?.quiet && console.error(`[db] ${msg}`);
 
-  if (_initialized) return;
-  _initialized = true;
+  if (dbGlobal[DB_INIT_GLOBAL_KEY]) return;
+  dbGlobal[DB_INIT_GLOBAL_KEY] = true;
 
   log('▶️ initializeDatabase() 开始...');
   log('  cwd = ' + process.cwd());
@@ -119,6 +140,7 @@ export function initializeDatabase(options?: { quiet?: boolean }): void {
     }
     log('🗄️ new Database() ...');
     _db = new DatabaseCtor(resolvedDbPath);
+    dbGlobal[DB_GLOBAL_KEY] = _db; // 挂到全局，供所有模块副本共享
     log('✅ 构造函数完成');
     _db.pragma('busy_timeout = 5000');
     log('✅ busy_timeout 完成');
@@ -135,6 +157,8 @@ export function initializeDatabase(options?: { quiet?: boolean }): void {
   } catch (err) {
     log('❌ 打开数据库失败: ' + (err as Error).message);
     log('   stack: ' + (err as Error).stack);
+    // 重置初始化标记，允许下次（含惰性初始化）重试
+    dbGlobal[DB_INIT_GLOBAL_KEY] = false;
     throw err;
   }
 
@@ -262,18 +286,20 @@ export function closeAndResetDatabase(): void {
       clearInterval(_backupInterval);
       _backupInterval = null;
     }
-    if (_db) {
+    const shared = dbGlobal[DB_GLOBAL_KEY];
+    if (shared) {
       try {
         // 先 checkpoint 刷 WAL 回主文件，确保导出/替换前文件是完整一致的
-        _db.pragma('wal_checkpoint(TRUNCATE)');
+        shared.pragma('wal_checkpoint(TRUNCATE)');
       } catch {
         /* 忽略 checkpoint 错误 */
       }
-      _db.close();
-      _db = null;
+      shared.close();
     }
+    _db = null;
+    dbGlobal[DB_GLOBAL_KEY] = undefined;
   } finally {
-    _initialized = false;
+    dbGlobal[DB_INIT_GLOBAL_KEY] = false;
   }
 }
 
