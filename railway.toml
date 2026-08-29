@@ -1,0 +1,18 @@
+# Railpack 极简配置：只装 better-sqlite3 需要的 C++ 编译链 + 指定单行构建命令
+[build]
+builder = "railpack"
+# 单行 buildCommand：直接跑 package.json 里的 pnpm build → scripts/build.sh 完整 4 步链
+buildCommand = "bash ./scripts/build.sh"
+
+# Railpack 底层基于 Nix + apt，装原生模块编译所需工具链
+[[build.nixpacks.aptPackages]]
+name = "python3"
+
+[[build.nixpacks.aptPackages]]
+name = "make"
+
+[[build.nixpacks.aptPackages]]
+name = "g++"
+
+[deploy]
+startCommand = "NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 NODE_OPTIONS='--max-old-space-size=1536' node dist/startup.js"
