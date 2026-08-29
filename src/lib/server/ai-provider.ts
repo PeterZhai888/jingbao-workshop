@@ -41,8 +41,8 @@ const PROVIDERS: Record<ProviderKey, ProviderDef> = {
   },
   hunyuan: {
     key: 'hunyuan', label: '腾讯混元',
-    baseURL: 'https://api.hunyuan.cloud.tencent.com/v1',
-    model: 'hunyuan-lite',
+    baseURL: 'https://tokenhub.tencentmaas.com/v1',
+    model: 'hy3-preview',
     envKey: 'HUNYUAN_API_KEY',
   },
   doubao: {
@@ -107,9 +107,9 @@ export const MODEL_CATALOG: Record<ProviderKey, CatalogModel[]> = {
     { id: 'deepseek-reasoner', label: 'deepseek-reasoner · 推理模型，稍贵', tier: 'flagship', note: '深度思考，最强质量' },
   ],
   hunyuan: [
-    { id: 'hunyuan-lite', label: 'hunyuan-lite · 免费额度（默认）', tier: 'fast', note: '响应迅捷，出片更快' },
-    { id: 'hunyuan-standard', label: 'hunyuan-standard · 标准价', tier: 'standard', note: '均衡之选，文案质量佳' },
-    { id: 'hunyuan-pro', label: 'hunyuan-pro · 旗舰价', tier: 'flagship', note: '最强质量，速度稍慢' },
+    { id: 'hy3-preview', label: 'hy3-preview · 平衡性能与成本（默认）', tier: 'standard', note: '均衡之选，文案质量佳' },
+    { id: 'hy3-4k', label: 'hy3-4k · 高速低成本', tier: 'fast', note: '响应迅捷，出片更快' },
+    { id: 'hy3-plus', label: 'hy3-plus · 高质量旗舰', tier: 'plus', note: '更强创意，适合精写' },
   ],
   doubao: [
     { id: 'doubao-lite-4k', label: 'doubao-lite-4k · 低价（默认，可填接入点ID）', tier: 'fast', note: '速度快，适合日常生成' },
