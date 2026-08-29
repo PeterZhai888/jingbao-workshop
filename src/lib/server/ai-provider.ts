@@ -159,7 +159,9 @@ function resolveOne(key: ProviderKey, model?: string): ResolvedProvider | null {
   let resolvedModel: string;
   if (model) {
     if (!MODEL_CATALOG[key].some((m) => m.id === model)) return null;
-    resolvedModel = model;
+    // 豆包（火山方舟）只认 ep- 开头的接入点 ID：用户选的具体模型名无法直接调用，
+    // 统一重定向到环境变量 DOUBAO_MODEL 配置的 ep-ID（未配置则仍发模型名，由方舟报错提示）
+    resolvedModel = (key === 'doubao' && def.envModel && process.env[def.envModel]) || model;
   } else {
     resolvedModel = (def.envModel && process.env[def.envModel]) || getSystemConfig(`ai_model_${def.key}`) || def.model;
   }
