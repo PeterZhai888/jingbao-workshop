@@ -7,22 +7,14 @@
         "npm install -g node-gyp@10",
         "pnpm install --frozen-lockfile --prefer-offline"
       ]
+    },
+    "build": {
+      "commands": [
+        "pnpm run build"
+      ]
     }
   },
   "deploy": {
-    "base": {
-      "image": "ghcr.io/railwayapp/railpack-runtime:mise-2026.8.13"
-    },
-    "inputs": [
-      {
-        "step": "packages:mise",
-        "include": ["/mise/shims", "/mise/installs", "/usr/local/bin/mise", "/etc/mise/config.toml", "/root/.local/state/mise"]
-      },
-      {
-        "step": "build",
-        "include": ["dist/**", ".next/**", "node_modules/**", "package.json", "startup.js"]
-      }
-    ],
     "startCommand": "NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 NODE_OPTIONS='--max-old-space-size=1536' node dist/startup.js"
   }
 }
