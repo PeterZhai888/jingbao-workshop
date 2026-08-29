@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.railpack.com",
-  "buildAptPackages": ["...", "build-essential", "python3"],
+  "buildAptPackages": ["build-essential", "python3"],
   "steps": {
     "install": {
       "commands": [
