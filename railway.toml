@@ -1,18 +1,8 @@
-# Railpack 极简配置：只装 better-sqlite3 需要的 C++ 编译链 + 指定单行构建命令
+# Railpack 0.38.0 极简配置：修复 node-gyp 版本 + 单行 buildCommand
 [build]
 builder = "railpack"
-# 单行 buildCommand：直接跑 package.json 里的 pnpm build → scripts/build.sh 完整 4 步链
-buildCommand = "bash ./scripts/build.sh"
-
-# Railpack 底层基于 Nix + apt，装原生模块编译所需工具链
-[[build.nixpacks.aptPackages]]
-name = "python3"
-
-[[build.nixpacks.aptPackages]]
-name = "make"
-
-[[build.nixpacks.aptPackages]]
-name = "g++"
+# 单行：修复 buggy node-gyp → install → 完整 4 步构建链
+buildCommand = "bash -c 'pnpm remove -g node-gyp 2>/dev/null; pnpm add -g node-gyp@10; pnpm install --frozen-lockfile --prefer-offline; bash ./scripts/build.sh'"
 
 [deploy]
 startCommand = "NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 NODE_OPTIONS='--max-old-space-size=1536' node dist/startup.js"
