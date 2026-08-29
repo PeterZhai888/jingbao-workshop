@@ -13,6 +13,7 @@ interface ProviderDef {
   envKey: string;      // 存 API Key 的环境变量名
   envBaseURL?: string; // 可覆盖 baseURL 的环境变量名
   envModel?: string;   // 可覆盖 model 的环境变量名
+  authPrefix?: string; // Authorization 头前缀，默认 "Bearer"；腾讯混元用 "token"
 }
 
 // 6 家提供商默认接入参数（全部兼容 OpenAI /chat/completions 格式）
@@ -44,6 +45,7 @@ const PROVIDERS: Record<ProviderKey, ProviderDef> = {
     baseURL: 'https://tokenhub.tencentmaas.com/v1',
     model: 'hy3',
     envKey: 'HUNYUAN_API_KEY',
+    authPrefix: 'token', // 腾讯混元要求 "Authorization: token xxx"，不是 "Bearer xxx"
   },
   doubao: {
     key: 'doubao', label: '字节豆包',
@@ -141,6 +143,7 @@ export interface ResolvedProvider {
   baseURL: string;
   model: string;
   apiKey: string;
+  authPrefix: string; // Authorization 头前缀
 }
 
 /** 解析单个提供商的完整配置（Key 为空返回 null）；指定 model 时校验白名单 */
@@ -165,7 +168,7 @@ function resolveOne(key: ProviderKey, model?: string): ResolvedProvider | null {
   } else {
     resolvedModel = (def.envModel && process.env[def.envModel]) || getSystemConfig(`ai_model_${def.key}`) || def.model;
   }
-  return { key: def.key, label: def.label, baseURL, model: resolvedModel, apiKey };
+  return { key: def.key, label: def.label, baseURL, model: resolvedModel, apiKey, authPrefix: def.authPrefix || 'Bearer' };
 }
 
 /**
@@ -337,7 +340,7 @@ export async function callAI(options: CallAIOptions): Promise<CallAIResult> {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${provider.apiKey}`,
+          Authorization: `${provider.authPrefix} ${provider.apiKey}`,
         },
         body: JSON.stringify({
           model: provider.model,
