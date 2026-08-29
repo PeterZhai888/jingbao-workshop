@@ -1,51 +1,70 @@
-import { createServer } from 'http';
+import { createServer, type ServerResponse } from 'http';
 import { parse } from 'url';
 import next from 'next';
 import { initializeDatabase } from '@/lib/server/db';
 
-// 注意：运行期配置校验（JWT_SECRET / DB_PATH）不在此文件内执行，
-// 因为 Next.js 构建阶段会 import server.ts 并通过 babel 插件触发执行，
-// 导致构建期缺少环境变量直接 exit(1)。校验由独立入口 dist/startup.js 负责。
-//
-// 但本文件在 Next.js 16 / Turbopack 构建期是否会被 import？
-//   不会：Next.js 只扫描 app/ 下的 route/page 及其依赖图。server.ts 是
-//   tsup 单独打包的独立入口，只有在运行期 node dist/server.js 才被执行。
-//   因此在这里执行 initializeDatabase 是 100% 安全的（构建期完全不会触发）。
-//
-// 启动顺序（运行期）：
-//   dist/startup.js → validateRuntimeConfig(JWT) → require('./server.js')
-//     → initializeDatabase()（建库/建表/建默认管理员/备份调度）
-//     → next.prepare() → http.listen
+console.error('[server] 🔧 server.ts 开始执行...');
+
+// 1. 先建库（同步，毫秒级）
+console.error('[server] 🗄️ initializeDatabase() ...');
 initializeDatabase();
+console.error('[server] ✅ 数据库就绪');
 
 const dev = process.env.NODE_ENV !== 'production';
-const hostname = process.env.HOSTNAME || 'localhost';
+const hostname = process.env.HOSTNAME || '0.0.0.0';
 const port = parseInt(process.env.PORT || '5000', 10);
 
-// Create Next.js app
+// 2. 先开 HTTP 端口！让 Railway Startup Probe 立刻探测成功
+//    prepare() 要花 5~15 秒，端口先开着就不会被 SIGKILL
+console.error('[server] 🌐 创建 HTTP server（先开端口防 Startup Probe 杀掉）...');
+let nextReady = false;
+let handleReady: ((req: any, res: any, parsedUrl: any) => Promise<void>) | null = null;
+
+const server = createServer(async (req, res) => {
+  if (!nextReady || !handleReady) {
+    // 还在 prepare，返回 503 让 Railway 知道活着
+    res.statusCode = 503;
+    res.setHeader('Content-Type', 'text/plain');
+    res.end('Starting up... please wait');
+    return;
+  }
+  try {
+    const parsedUrl = parse(req.url!, true);
+    await handleReady(req, res, parsedUrl);
+  } catch (err) {
+    console.error('[server] ❌ handle error:', req.url, err);
+    res.statusCode = 500;
+    res.end('Internal server error');
+  }
+});
+
+server.once('error', err => {
+  console.error('[server] ❌ server.listen 炸了:', err);
+  process.exit(1);
+});
+
+server.listen(port, '0.0.0.0', () => {
+  console.error(`[server] 🎉 端口 ${port} 已打开！Railway Startup Probe 通过 ✅`);
+});
+
+// 3. 后台慢慢 prepare Next.js（端口已经开了，不会被杀）
+console.error('[server] ⏳ Next.js prepare() 中（约 5~15 秒）...');
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
-app.prepare().then(() => {
-  const server = createServer(async (req, res) => {
-    try {
-      const parsedUrl = parse(req.url!, true);
-      await handle(req, res, parsedUrl);
-    } catch (err) {
-      console.error('Error occurred handling', req.url, err);
-      res.statusCode = 500;
-      res.end('Internal server error');
-    }
-  });
-  server.once('error', err => {
-    console.error(err);
-    process.exit(1);
-  });
-  server.listen(port, () => {
+app
+  .prepare()
+  .then(() => {
+    handleReady = handle;
+    nextReady = true;
+    console.error('[server] ✅ Next.js prepare 完成！现在正式提供服务');
     console.log(
-      `> Server listening at http://${hostname}:${port} as ${
-        dev ? 'development' : 'production'
-      }`,
+      `> Server ready at http://${hostname}:${port} as ${dev ? 'development' : 'production'}`,
     );
+  })
+  .catch(err => {
+    console.error('[server] ❌ Next.js prepare 失败:', err);
+    // 不退出！端口还开着，持续返回 503，方便 Railway 继续探
+    // 给 10 秒让用户看到日志再退出
+    setTimeout(() => process.exit(1), 10000);
   });
-});
