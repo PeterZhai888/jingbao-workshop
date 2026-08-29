@@ -1,8 +1,0 @@
-# Railpack 0.38.0 极简配置
-[build]
-builder = "railpack"
-# 纯 build 命令——node-gyp 版本已由 package.json preinstall 脚本接管
-buildCommand = "pnpm run build"
-
-[deploy]
-startCommand = "NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 NODE_OPTIONS='--max-old-space-size=1536' node dist/startup.js"

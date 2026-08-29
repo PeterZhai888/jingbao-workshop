@@ -1,0 +1,15 @@
+{
+  "$schema": "https://schema.railpack.com",
+  "buildAptPackages": ["...", "build-essential", "python3"],
+  "steps": {
+    "install": {
+      "commands": [
+        "pnpm add -g node-gyp@10",
+        "pnpm install --frozen-lockfile --prefer-offline"
+      ]
+    }
+  },
+  "deploy": {
+    "startCommand": "NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 NODE_OPTIONS='--max-old-space-size=1536' node dist/startup.js"
+  }
+}
