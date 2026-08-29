@@ -12,7 +12,8 @@ interface ProviderDef {
   model: string;
   envKey: string;      // 存 API Key 的环境变量名
   envBaseURL?: string; // 可覆盖 baseURL 的环境变量名
-  envModel?: string;   // 可覆盖 model 的环境变量名
+  envModel?: string;   // 可覆盖 model 的环境变量名（全局兜底）
+  envModelByTier?: Partial<Record<ModelTier, string>>; // 按档位分别覆盖模型的环境变量名（豆包特有：不同档位用不同 ep-ID）
   authPrefix?: string; // Authorization 头前缀，默认 "Bearer"；腾讯混元用 "token"
   timeoutMs?: number;  // 单独超时（毫秒），默认 30s
 }
@@ -53,7 +54,14 @@ const PROVIDERS: Record<ProviderKey, ProviderDef> = {
     baseURL: 'https://ark.cn-beijing.volces.com/api/v3',
     model: 'doubao-lite-4k',
     envKey: 'DOUBAO_API_KEY',
-    envModel: 'DOUBAO_MODEL', // 豆包需填接入点ID，用环境变量覆盖
+    envModel: 'DOUBAO_MODEL', // 兜底（单接入点场景）
+    // 多接入点场景：不同档位自动切不同 ep-ID
+    envModelByTier: {
+      fast: 'DOUBAO_MODEL_FAST',         // Seed1.6-flash 极速
+      standard: 'DOUBAO_MODEL_STANDARD',  // Seed2.1-Turbo 标准（推荐）
+      plus: 'DOUBAO_MODEL_PLUS',          // 高质量（没配则 fallback STANDARD）
+      flagship: 'DOUBAO_MODEL_FLAGSHIP',  // 旗舰（没配则 fallback STANDARD）
+    },
     timeoutMs: 180_000, // Seed 系列是思考型模型，深度思考+长输出耗时久，放宽到 3 分钟
   },
   siliconflow: {
@@ -116,10 +124,10 @@ export const MODEL_CATALOG: Record<ProviderKey, CatalogModel[]> = {
     { id: 'hy3-preview', label: 'hy3-preview · 旧版（2026-08-31 下线，不推荐）', tier: 'standard', note: '旧版模型，即将下线' },
   ],
   doubao: [
-    { id: 'doubao-lite-4k', label: 'doubao-lite-4k · 低价（默认，可填接入点ID）', tier: 'fast', note: '速度快，适合日常生成' },
-    { id: 'doubao-lite-32k', label: 'doubao-lite-32k · 低价长文本', tier: 'fast', note: '支持长文案创作' },
-    { id: 'doubao-pro-4k', label: 'doubao-pro-4k · 标准价', tier: 'standard', note: '均衡之选，文案质量佳' },
-    { id: 'doubao-pro-32k', label: 'doubao-pro-32k · 标准价长文本', tier: 'plus', note: '长文案精写之选' },
+    { id: 'doubao-lite-4k', label: 'Seed1.6-flash · 极速（1-4s，默认）', tier: 'fast', note: '速度优先，复杂剧情质量略降' },
+    { id: 'doubao-lite-32k', label: 'Seed1.6-flash · 极速长文本', tier: 'fast', note: '极速响应，支持长文案' },
+    { id: 'doubao-pro-4k', label: 'Seed2.1-Turbo · 标准（推荐）', tier: 'standard', note: '质量速度平衡，适合日常生成' },
+    { id: 'doubao-pro-32k', label: 'Seed2.1-Turbo · 长文本', tier: 'plus', note: '长文案精写之选' },
   ],
   siliconflow: [
     { id: 'Qwen/Qwen2.5-7B-Instruct', label: 'Qwen2.5-7B · 免费额度（默认）', tier: 'fast', note: '响应迅捷，出片更快' },
@@ -161,15 +169,37 @@ function resolveOne(key: ProviderKey, model?: string): ResolvedProvider | null {
   const apiKey = (keyFromDb ? decryptSecret(keyFromDb) : '') || envApiKey || '';
   if (!apiKey) return null;
   const baseURL = (def.envBaseURL && process.env[def.envBaseURL]) || def.baseURL;
+
+  /** 豆包多接入点：根据模型档位挑 env 变量；没配则回退到 STANDARD / envModel / 模型名 */
+  function resolveDoubaoByTier(modelId: string): string {
+    if (key !== 'doubao' || !def.envModelByTier) return modelId;
+    const tier = MODEL_CATALOG.doubao.find((m) => m.id === modelId)?.tier;
+    if (tier) {
+      // 优先用当前档位 env → 没配回退到 STANDARD → 再回退到全局 DOUBAO_MODEL → 最后用模型名本身
+      const tierEnv = def.envModelByTier[tier];
+      const standardEnv = def.envModelByTier.standard;
+      const byTier =
+        (tierEnv && process.env[tierEnv]) ||
+        (standardEnv && process.env[standardEnv]) ||
+        (def.envModel && process.env[def.envModel]);
+      if (byTier) return byTier;
+    }
+    // 无档位信息时用兜底 env
+    return (def.envModel && process.env[def.envModel]) || modelId;
+  }
+
   // 用户指定模型必须在目录白名单内；未指定走后台配置/默认
   let resolvedModel: string;
   if (model) {
     if (!MODEL_CATALOG[key].some((m) => m.id === model)) return null;
-    // 豆包（火山方舟）只认 ep- 开头的接入点 ID：用户选的具体模型名无法直接调用，
-    // 统一重定向到环境变量 DOUBAO_MODEL 配置的 ep-ID（未配置则仍发模型名，由方舟报错提示）
-    resolvedModel = (key === 'doubao' && def.envModel && process.env[def.envModel]) || model;
+    resolvedModel = resolveDoubaoByTier(model);
   } else {
-    resolvedModel = (def.envModel && process.env[def.envModel]) || getSystemConfig(`ai_model_${def.key}`) || def.model;
+    // 自动匹配：先找 STANDARD 档位 env → 再找兜底 env → 后台配置 → 代码默认
+    if (key === 'doubao' && def.envModelByTier?.standard && process.env[def.envModelByTier.standard]) {
+      resolvedModel = process.env[def.envModelByTier.standard]!;
+    } else {
+      resolvedModel = (def.envModel && process.env[def.envModel]) || getSystemConfig(`ai_model_${def.key}`) || def.model;
+    }
   }
   return { key: def.key, label: def.label, baseURL, model: resolvedModel, apiKey, authPrefix: def.authPrefix || 'Bearer', timeoutMs: def.timeoutMs || 60_000 };
 }
