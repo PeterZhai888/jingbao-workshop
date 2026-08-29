@@ -360,6 +360,10 @@ export async function callAI(options: CallAIOptions): Promise<CallAIResult> {
     return { ok: false, content: '', provider: '-', error: 'AI_PROVIDER_NOT_CONFIGURED' };
   }
 
+  // 运行时诊断：把实际发给 AI 提供商的 model 打出来（ep-ID 只取前 12 位）
+  const modelPreview = provider.model.startsWith('ep-') ? `${provider.model.slice(0, 12)}...` : provider.model;
+  console.log(`[ai-call] provider=${provider.label} model=${modelPreview} userRequested=${options.model ?? '(auto)'}`);
+
   const timeoutMs = options.timeoutMs ?? provider.timeoutMs;
   const maxRetries = options.maxRetries ?? 2;
 
