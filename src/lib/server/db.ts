@@ -50,21 +50,74 @@ let _initialized = false;
  * @param options.quiet 构建期（比如 warmup）调用时，避免 console 输出
  */
 export function initializeDatabase(options?: { quiet?: boolean }): void {
+  const log = (msg: string) => !options?.quiet && console.error(`[db] ${msg}`);
+
   if (_initialized) return;
   _initialized = true;
 
-  // 动态 import（Node 20 原生支持 ESM import()，但 better-sqlite3 更稳用 require）
-  // 用 require 避免在顶层 import 时就触发 C++ 原生模块加载
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const DatabaseCtor: typeof Database = require('better-sqlite3');
+  log('▶️ initializeDatabase() 开始...');
+  log('  cwd = ' + process.cwd());
+  log('  node = ' + process.version + ' arch=' + process.arch + ' platform=' + process.platform);
 
+  // === 先做文件系统诊断 ===
+  const nmDir = path.resolve(process.cwd(), 'node_modules');
+  log('  node_modules/ 存在: ' + fs.existsSync(nmDir));
+
+  const bsDirCandidates = [
+    path.resolve(nmDir, 'better-sqlite3'),
+    path.resolve(nmDir, '.pnpm/better-sqlite3@13.0.3/node_modules/better-sqlite3'),
+  ];
+  for (const d of bsDirCandidates) {
+    log('  检查 ' + d + ' → ' + fs.existsSync(d));
+    if (fs.existsSync(d)) {
+      // 列 prebuilds 目录
+      const prebuildsDir = path.resolve(d, 'prebuilds');
+      if (fs.existsSync(prebuildsDir)) {
+        log('  prebuilds/ 内容: ' + fs.readdirSync(prebuildsDir).join(', '));
+      } else {
+        log('  prebuilds/ 不存在 ❌');
+      }
+      // 列 build/Release
+      const buildDir = path.resolve(d, 'build/Release');
+      if (fs.existsSync(buildDir)) {
+        log('  build/Release 内容: ' + fs.readdirSync(buildDir).join(', '));
+      }
+    }
+  }
+
+  // === require better-sqlite3 ===
+  log('🔌 正在 require("better-sqlite3")...');
+  let DatabaseCtor: typeof Database;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    DatabaseCtor = require('better-sqlite3');
+    log('✅ require better-sqlite3 成功！');
+  } catch (err) {
+    log('❌ require better-sqlite3 失败: ' + (err as Error).message);
+    log('   stack: ' + (err as Error).stack);
+    throw err;
+  }
+
+  // === 打开 DB ===
   const resolvedDbPath = path.resolve(process.cwd(), CONFIG.DB_PATH);
   const dbDir = path.dirname(resolvedDbPath);
-  if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
+  log('📂 DB 路径: ' + resolvedDbPath + ' (目录: ' + dbDir + ')');
 
-  _db = new DatabaseCtor(resolvedDbPath);
-  _db.pragma('journal_mode = WAL');
-  _db.pragma('foreign_keys = ON');
+  try {
+    if (!fs.existsSync(dbDir)) {
+      log('  创建 DB 目录...');
+      fs.mkdirSync(dbDir, { recursive: true });
+    }
+    log('🗄️ new Database() ...');
+    _db = new DatabaseCtor(resolvedDbPath);
+    _db.pragma('journal_mode = WAL');
+    _db.pragma('foreign_keys = ON');
+    log('✅ 数据库打开成功！');
+  } catch (err) {
+    log('❌ 打开数据库失败: ' + (err as Error).message);
+    log('   stack: ' + (err as Error).stack);
+    throw err;
+  }
 
   // ========= 建表 =========
   _db.exec(`
