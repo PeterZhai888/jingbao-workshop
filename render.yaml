@@ -17,10 +17,17 @@ services:
     buildCommand: |
       set -euo pipefail
       export NEXT_TELEMETRY_DISABLED=1
+      export NEXT_PRIVATE_NTBA_CPUS=2
       # 防止构建期内存收紧（free 实例 512M，给 400M heap 足够）
       export NODE_OPTIONS="--max-old-space-size=400"
+      rm -f .babelrc babel.config.*
+      echo "[Step 1/4] TypeScript 类型检查（单进程）..."
+      pnpm tsc -p tsconfig.json --noEmit
+      echo "[Step 2/4] Next.js 生产构建（跳过 Next 内置 TypeScript 步骤）..."
       pnpm next build
+      echo "[Step 3/4] 打包 server + config..."
       pnpm tsup src/server.ts src/lib/server/config.ts --format cjs --platform node --target node20 --outDir dist --no-splitting --no-minify
+      echo "[Step 4/4] 拷贝启动入口..."
       cp src/startup.ts dist/startup.js
 
     # 启动

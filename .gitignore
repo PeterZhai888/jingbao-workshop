@@ -173,3 +173,7 @@ Desktop.ini
 # Misc
 .coze-logs
 .codegraph/
+# 开发期 react-dev-inspector 本地配置，绝不能进仓库（否则 Next.js 构建期被插件拦截执行代码）
+.babelrc
+.babelrc.*
+babel.config.*

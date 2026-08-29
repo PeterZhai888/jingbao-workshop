@@ -14,7 +14,7 @@ name = "NEXT_TELEMETRY_DISABLED"
 value = "1"
 [[build.env]]
 name = "NEXT_PRIVATE_NTBA_CPUS"
-value = "4"
+value = "2"
 [[build.env]]
 name = "NODE_OPTIONS"
 value = "--max-old-space-size=4096"
@@ -23,13 +23,26 @@ value = "--max-old-space-size=4096"
 builder = "nixpacks"
 # nixpacks Node provider 默认会跑 npm/pnpm install + build 脚本；
 # 这里显式指定 buildCommand 以防默认 package.json 的 build 脚本只跑 next build（少了 tsup+cp startup）
+#
+# ⚠️ 构建顺序严格遵循：
+#   1) rm .babelrc* → 彻底根除 react-dev-inspector 插件在构建期注入（仓库 .gitignore 也禁了，双保险）
+#   2) pnpm install → 装依赖 + better-sqlite3 源码编译（nixpacks Node 镜像默认含 python3/make/g++）
+#   3) pnpm tsc --noEmit → **单进程跑完整类型检查**，内存可控（避免 Next 多 worker 并行 tsc OOM）
+#   4) pnpm next build → 此时 next.config.ts 已 ignoreBuildErrors=true，跳过 Running TypeScript
+#   5) tsup 打包 server bundle + cp startup.js 启动入口
 buildCommand = """
   set -euo pipefail
   rm -f .babelrc babel.config.*
   pnpm install --frozen-lockfile || pnpm install
+  echo "[Build Step 1/4] TypeScript 类型检查（单进程）..."
+  pnpm tsc -p tsconfig.json --noEmit
+  echo "[Build Step 2/4] Next.js 生产构建（跳过 Next 内置 TypeScript 步骤，已在上一步完成）..."
   pnpm next build
+  echo "[Build Step 3/4] 打包 server + config 为 CommonJS bundle..."
   pnpm tsup src/server.ts src/lib/server/config.ts --format cjs --platform node --target node20 --outDir dist --no-splitting --no-minify
+  echo "[Build Step 4/4] 拷贝独立启动入口 startup.js..."
   cp src/startup.ts dist/startup.js
+  echo "[Build Done] ✓"
 """
 
 [deploy]

@@ -8,7 +8,11 @@ cd "${COZE_WORKSPACE_PATH}"
 echo "Installing dependencies..."
 pnpm install --prefer-frozen-lockfile --prefer-offline --loglevel debug --reporter=append-only
 
-echo "Building the Next.js project..."
+echo "[Build Step 1/4] TypeScript 类型检查（单进程，避免 CI/容器 OOM）..."
+pnpm tsc -p tsconfig.json --noEmit
+
+echo "[Build Step 2/4] Building the Next.js project（跳过 Next 内置 TypeScript 步骤，已在上一步完成）..."
+export NEXT_PRIVATE_NTBA_CPUS="${NEXT_PRIVATE_NTBA_CPUS:-2}"
 pnpm next build
 
 echo "Bundling server with tsup..."
