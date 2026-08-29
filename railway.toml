@@ -1,8 +1,8 @@
-# Railpack 0.38.0 极简配置：修复 node-gyp 版本 + 单行 buildCommand
+# Railpack 0.38.0 极简配置
 [build]
 builder = "railpack"
-# 单行：修复 buggy node-gyp → install → 完整 4 步构建链
-buildCommand = "bash -c 'pnpm remove -g node-gyp 2>/dev/null; pnpm add -g node-gyp@10; pnpm install --frozen-lockfile --prefer-offline; bash ./scripts/build.sh'"
+# 纯 build 命令——node-gyp 版本已由 package.json preinstall 脚本接管
+buildCommand = "pnpm run build"
 
 [deploy]
 startCommand = "NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 NODE_OPTIONS='--max-old-space-size=1536' node dist/startup.js"
