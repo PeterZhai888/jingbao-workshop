@@ -135,7 +135,7 @@ export async function POST(request: NextRequest) {
       { role: 'system', content: buildSystemPrompt(count) },
       { role: 'user', content: `视频文案：\n${text}` },
     ],
-    timeoutMs: 45_000, // 分镜生成内容较长，放宽到 45 秒
+    maxRetries: 1, // 超时重试同样消耗豆包 token，控制在最多 2 次尝试
     preferred,
     model,
   });

@@ -54,7 +54,7 @@ const PROVIDERS: Record<ProviderKey, ProviderDef> = {
     model: 'doubao-lite-4k',
     envKey: 'DOUBAO_API_KEY',
     envModel: 'DOUBAO_MODEL', // 豆包需填接入点ID，用环境变量覆盖
-    timeoutMs: 60_000, // 豆包首次冷启动/推理较慢，单独放宽到 60s
+    timeoutMs: 180_000, // Seed 系列是思考型模型，深度思考+长输出耗时久，放宽到 3 分钟
   },
   siliconflow: {
     key: 'siliconflow', label: '硅基流动',
@@ -171,7 +171,7 @@ function resolveOne(key: ProviderKey, model?: string): ResolvedProvider | null {
   } else {
     resolvedModel = (def.envModel && process.env[def.envModel]) || getSystemConfig(`ai_model_${def.key}`) || def.model;
   }
-  return { key: def.key, label: def.label, baseURL, model: resolvedModel, apiKey, authPrefix: def.authPrefix || 'Bearer', timeoutMs: def.timeoutMs || 30_000 };
+  return { key: def.key, label: def.label, baseURL, model: resolvedModel, apiKey, authPrefix: def.authPrefix || 'Bearer', timeoutMs: def.timeoutMs || 60_000 };
 }
 
 /**
