@@ -57,8 +57,8 @@ const PROVIDERS: Record<ProviderKey, ProviderDef> = {
     envModel: 'DOUBAO_MODEL', // 兜底（单接入点场景）
     // 多接入点场景：不同档位自动切不同 ep-ID
     envModelByTier: {
-      fast: 'DOUBAO_MODEL_FAST',         // Seed1.6-flash 极速
-      standard: 'DOUBAO_MODEL_STANDARD',  // Seed2.1-Turbo 标准（推荐）
+      fast: 'DOUBAO_MODEL_FAST',         // Seed-2.0-lite 极速
+      standard: 'DOUBAO_MODEL_STANDARD',  // Seed-2.1-Turbo 标准（推荐）
       plus: 'DOUBAO_MODEL_PLUS',          // 高质量（没配则 fallback STANDARD）
       flagship: 'DOUBAO_MODEL_FLAGSHIP',  // 旗舰（没配则 fallback STANDARD）
     },
@@ -124,10 +124,10 @@ export const MODEL_CATALOG: Record<ProviderKey, CatalogModel[]> = {
     { id: 'hy3-preview', label: 'hy3-preview · 旧版（2026-08-31 下线，不推荐）', tier: 'standard', note: '旧版模型，即将下线' },
   ],
   doubao: [
-    { id: 'doubao-lite-4k', label: 'Seed1.6-flash · 极速（1-4s，默认）', tier: 'fast', note: '速度优先，复杂剧情质量略降' },
-    { id: 'doubao-lite-32k', label: 'Seed1.6-flash · 极速长文本', tier: 'fast', note: '极速响应，支持长文案' },
-    { id: 'doubao-pro-4k', label: 'Seed2.1-Turbo · 标准（推荐）', tier: 'standard', note: '质量速度平衡，适合日常生成' },
-    { id: 'doubao-pro-32k', label: 'Seed2.1-Turbo · 长文本', tier: 'plus', note: '长文案精写之选' },
+    { id: 'doubao-lite-4k', label: 'Seed-2.0-lite · 极速（默认）', tier: 'fast', note: '速度快，日常生成推荐' },
+    { id: 'doubao-lite-32k', label: 'Seed-2.0-lite · 极速长文本', tier: 'fast', note: '极速响应，支持长文案' },
+    { id: 'doubao-pro-4k', label: 'Seed-2.1-Turbo · 标准（推荐）', tier: 'standard', note: '质量速度平衡，适合日常生成' },
+    { id: 'doubao-pro-32k', label: 'Seed-2.1-Turbo · 长文本', tier: 'plus', note: '长文案精写之选' },
   ],
   siliconflow: [
     { id: 'Qwen/Qwen2.5-7B-Instruct', label: 'Qwen2.5-7B · 免费额度（默认）', tier: 'fast', note: '响应迅捷，出片更快' },
