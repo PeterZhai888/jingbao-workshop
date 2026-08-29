@@ -109,13 +109,13 @@ export function ModelSelector({
   }, [value, catalog]);
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 w-full">
       <Bot className="h-4 w-4 shrink-0 text-muted-foreground" />
       <Select value={value.model ? `${value.provider}::${value.model}` : 'auto'} onValueChange={handleSelect}>
-        <SelectTrigger className="h-9 w-auto gap-1.5 text-sm">
+        <SelectTrigger className="h-9 w-full gap-1.5 text-sm min-w-0">
           <SelectValue placeholder="自动匹配" />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent align="start" sideOffset={4}>
           <SelectGroup>
             <SelectLabel>模型</SelectLabel>
             <SelectItem value="auto" className="gap-2">
@@ -147,7 +147,6 @@ export function ModelSelector({
           </SelectGroup>
         </SelectContent>
       </Select>
-      <span className="text-xs text-muted-foreground hidden sm:inline">{display}</span>
     </div>
   );
 }

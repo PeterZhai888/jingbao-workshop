@@ -23,6 +23,13 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
+function scrollToCardInput() {
+  const el = document.getElementById('card-input');
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}
+
 export default function HomePage() {
   const { session, isLoading, verifyCard, logout } = useCardAuth();
   const router = useRouter();
@@ -110,13 +117,11 @@ export default function HomePage() {
               </>
             ) : (
               <>
-                <a href="#card-input">
-                  <Button size="lg" className="gap-2 w-full sm:w-auto shadow-lg shadow-primary/20">
-                    <Rocket className="h-5 w-5" />
-                    输入卡密激活
-                  </Button>
-                </a>
-                <a href="#features">
+                <Button size="lg" className="gap-2 w-full sm:w-auto shadow-lg shadow-primary/20" onClick={scrollToCardInput}>
+                  <Rocket className="h-5 w-5" />
+                  输入卡密激活
+                </Button>
+                <a href="#features" onClick={(e) => { e.preventDefault(); document.getElementById('features')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>
                   <Button size="lg" variant="outline" className="gap-2 w-full sm:w-auto">
                     了解功能
                   </Button>
