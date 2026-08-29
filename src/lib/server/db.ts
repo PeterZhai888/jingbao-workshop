@@ -179,6 +179,41 @@ export function initializeDatabase(options?: { quiet?: boolean }): void {
 }
 
 // ========= 类型导出 =========
+/**
+ * 管理后台用：关闭当前数据库连接并重置初始化标记。
+ * 用于 DB 恢复（restore）时安全替换底层 .db 文件后重新初始化。
+ * ⚠️ 只允许超级管理员通过 /api/admin/db/restore 调用，且此调用必须独占（无并发写入）。
+ */
+export function closeAndResetDatabase(): void {
+  try {
+    if (_backupInterval) {
+      clearInterval(_backupInterval);
+      _backupInterval = null;
+    }
+    if (_db) {
+      try {
+        // 先 checkpoint 刷 WAL 回主文件，确保导出/替换前文件是完整一致的
+        _db.pragma('wal_checkpoint(TRUNCATE)');
+      } catch {
+        /* 忽略 checkpoint 错误 */
+      }
+      _db.close();
+      _db = null;
+    }
+  } finally {
+    _initialized = false;
+  }
+}
+
+/** 管理后台用：返回当前 SQLite 数据库文件的绝对路径，供备份下载/恢复替换用。PostgreSQL 模式下为 null。 */
+export function getDatabaseFilePath(): string | null {
+  // 仅 SQLite 才有本地文件路径；扩展 Postgres 时返回 null
+  const type = (process.env.DB_TYPE || 'sqlite').toLowerCase();
+  if (type !== 'sqlite') return null;
+  // eslint-disable-next-line no-process-env
+  return require('node:path').resolve(process.cwd(), CONFIG.DB_PATH);
+}
+
 export type CardStatus = 'unused' | 'active' | 'frozen' | 'revoked' | 'expired';
 
 export interface CardRow {

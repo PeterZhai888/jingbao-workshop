@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { SITE_NAME } from '@/lib/site';
 import { Button } from '@/components/ui/button';
@@ -26,6 +26,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from '@/components/ui/alert';
 import {
   Table,
   TableBody,
@@ -55,6 +60,8 @@ import {
   Search,
   Plus,
   Download,
+  UploadCloud,
+  Database,
   Copy,
   CheckCircle2,
   ChevronLeft,
@@ -1492,7 +1499,7 @@ const TIER_BUCKET_META: Record<number, { label: string; barCls: string }> = {
 };
 
 function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout: () => void }) {
-  const [tab, setTab] = useState<'cards' | 'logs' | 'config'>('cards');
+  const [tab, setTab] = useState<'cards' | 'logs' | 'config' | 'maintain'>('cards');
   const [stats, setStats] = useState<StatsData | null>(null);
 
   const loadStats = useCallback(async () => {
@@ -1524,6 +1531,7 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
     { key: 'cards' as const, label: '卡密管理', icon: CreditCard },
     { key: 'logs' as const, label: '使用日志', icon: ScrollText },
     { key: 'config' as const, label: '系统配置', icon: Settings },
+    { key: 'maintain' as const, label: '数据维护', icon: Database },
   ];
 
   const trendMax = Math.max(1, ...(stats?.trend7d || []).map((t) => t.count));
@@ -1688,6 +1696,7 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
       {tab === 'cards' && <CardsPanel token={session.token} />}
       {tab === 'logs' && <LogsPanel token={session.token} />}
       {tab === 'config' && <ConfigPanel token={session.token} />}
+      {tab === 'maintain' && <MaintenancePanel token={session.token} />}
     </div>
   );
 }
@@ -1787,6 +1796,206 @@ function ChangePasswordDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ========= Tab 4: 数据维护（备份下载 / 恢复上传） =========
+// 适用场景：
+//   - Railway 免费版没有 Volume，每次重新部署容器磁盘会重置；
+//     部署完后把之前下载的 .db 通过这里一键上传，所有卡密/配置/日志原样恢复。
+//   - 任何平台切换（Render → 阿里云 → 腾讯云）时，都能跨平台一键迁移完整数据库。
+function MaintenancePanel({ token }: { token: string }) {
+  const [downloading, setDownloading] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      const res = await fetch('/api/admin/db/backup', {
+        headers: withAuth(token),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || `备份失败 (HTTP ${res.status})`);
+        return;
+      }
+      // 从响应头取文件名，取不到就用默认
+      let filename = `jingbao-workshop_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.db`;
+      const disposition = res.headers.get('Content-Disposition');
+      if (disposition) {
+        const m = /filename="?([^";]+)"?/.exec(disposition);
+        if (m) filename = m[1];
+      }
+      const buf = await res.arrayBuffer();
+      const blob = new Blob([buf], { type: 'application/vnd.sqlite3' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      toast.success(`数据库备份已下载：${filename}`);
+    } catch {
+      toast.error('下载失败，网络或服务端异常');
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const onFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0] || null;
+    if (!f) return;
+    if (!f.name.toLowerCase().endsWith('.db')) {
+      toast.error('文件后缀必须是 .db（SQLite 3 数据库）');
+      e.target.value = '';
+      return;
+    }
+    setPendingFile(f);
+    setConfirmOpen(true);
+    e.target.value = '';
+  };
+
+  const confirmRestore = async () => {
+    if (!pendingFile) return;
+    setRestoring(true);
+    try {
+      const fd = new FormData();
+      fd.append('db_file', pendingFile);
+      const res = await fetch('/api/admin/db/restore', {
+        method: 'POST',
+        headers: withAuth(token),
+        body: fd,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        toast.success(data.message || '数据库已成功恢复');
+        setPendingFile(null);
+        setConfirmOpen(false);
+        // 恢复后 admin session 可能还在（因为 admin_users 表和当前 token 匹配），
+        // 但为了稳妥，1.5 秒后刷新整页重新校验权限
+        setTimeout(() => window.location.reload(), 1500);
+      } else {
+        toast.error(data.error || `恢复失败 (HTTP ${res.status})`);
+      }
+    } catch {
+      toast.error('网络错误');
+    } finally {
+      setRestoring(false);
+    }
+  };
+
+  return (
+    <div className="grid lg:grid-cols-2 gap-4">
+      {/* 备份下载 */}
+      <Card className="border-border/60">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Download className="h-5 w-5 text-emerald-600" />
+            下载数据库备份
+          </CardTitle>
+          <CardDescription>
+            导出当前全部数据到 .db 文件（卡密、管理员、使用日志、历史生成、AI 配置等），保存到本地电脑作为备份。
+            建议每次大规模改卡密 / 改配置后都手动下载一次。
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground space-y-2">
+            <div>• 文件格式：SQLite 3（.db）</div>
+            <div>• 包含：卡密表、管理员、使用日志、生成历史、系统配置（含加密后的 AI Key）</div>
+            <div>• 兼容：可直接上传到另一台「镜爆工坊」实例做恢复 / 迁移</div>
+            <div>• 建议：<strong className="text-foreground">部署到 Railway 免费版后，每周下载一次备份</strong>，避免容器重建丢数据</div>
+          </div>
+          <Button
+            onClick={handleDownload}
+            disabled={downloading}
+            className="gap-2"
+          >
+            {downloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            {downloading ? '正在打包下载…' : '下载 jingbao.db 备份'}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* 恢复上传 */}
+      <Card className="border-border/60">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <UploadCloud className="h-5 w-5 text-amber-600" />
+            从备份恢复数据库
+          </CardTitle>
+          <CardDescription>
+            上传之前下载的 .db 文件，完整覆盖当前数据库。用于重新部署后的恢复，或从一个平台（Render）迁到另一平台（阿里云 / 腾讯云）。
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Alert className="border-amber-300 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-900">
+            <ShieldAlert className="h-4 w-4" />
+            <AlertTitle className="text-sm font-semibold">危险操作</AlertTitle>
+            <AlertDescription className="text-xs leading-relaxed">
+              恢复会直接<strong>覆盖当前数据库</strong>。系统会自动在服务器
+              <code className="mx-1 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] dark:bg-amber-900/40">/backups/restore_before_时间戳.db</code>
+              保存一份旧库快照，如操作失误可在服务端手动回滚。
+            </AlertDescription>
+          </Alert>
+          <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground space-y-2">
+            <div>• 只能上传之前由本系统「下载数据库备份」导出的 .db 文件</div>
+            <div>• 文件头校验必须是 SQLite 3，且内含 cards / admin_users / system_config 三张表</div>
+            <div>• 操作成功后页面会自动刷新，请重新登录管理后台</div>
+            <div>• 典型场景：Railway 重新部署容器后 → 上传上次备份 → 数据全回来了 ✅</div>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".db,application/vnd.sqlite3,application/octet-stream"
+            className="hidden"
+            onChange={onFileSelected}
+          />
+          <Button
+            variant="outline"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={restoring}
+            className="gap-2"
+          >
+            {restoring ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+            {restoring ? '正在恢复…' : '选择 .db 文件并恢复'}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* 恢复二次确认弹窗 */}
+      <AlertDialog open={confirmOpen} onOpenChange={(o) => !restoring && setConfirmOpen(o)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认覆盖数据库？</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              即将恢复数据库：
+              <div className="rounded border border-border p-2.5 mt-1.5 text-xs font-mono break-all">
+                {pendingFile?.name}（{(pendingFile ? (pendingFile.size / 1024).toFixed(1) : '0')} KB）
+              </div>
+              <div className="text-rose-600 dark:text-rose-400 pt-1">
+                ⚠️ 当前所有卡密、日志、系统配置都会被替换。旧库会在服务器端自动备份一份，不会丢失。
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={restoring}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={restoring}
+              onClick={(e) => { e.preventDefault(); void confirmRestore(); }}
+              className="bg-rose-600 hover:bg-rose-700 text-white focus:ring-rose-500"
+            >
+              {restoring && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              {restoring ? '恢复中，请稍候…' : '确认覆盖并恢复'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
   );
 }
 
