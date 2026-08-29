@@ -113,8 +113,18 @@ export function initializeDatabase(options?: { quiet?: boolean }): void {
     }
     log('🗄️ new Database() ...');
     _db = new DatabaseCtor(resolvedDbPath);
-    _db.pragma('journal_mode = WAL');
+    log('✅ 构造函数完成');
+    _db.pragma('busy_timeout = 5000');
+    log('✅ busy_timeout 完成');
+    try {
+      _db.pragma('journal_mode = WAL');
+      log('✅ WAL 模式开启');
+    } catch (walErr) {
+      // Railway 等容器 overlayfs 上 WAL 可能 hang/失败，回退到默认 journal 模式
+      log('⚠️ WAL 不可用，回退默认 journal 模式: ' + (walErr as Error).message);
+    }
     _db.pragma('foreign_keys = ON');
+    log('✅ foreign_keys 完成');
     log('✅ 数据库打开成功！');
   } catch (err) {
     log('❌ 打开数据库失败: ' + (err as Error).message);
