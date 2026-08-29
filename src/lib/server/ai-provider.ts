@@ -14,6 +14,7 @@ interface ProviderDef {
   envBaseURL?: string; // 可覆盖 baseURL 的环境变量名
   envModel?: string;   // 可覆盖 model 的环境变量名
   authPrefix?: string; // Authorization 头前缀，默认 "Bearer"；腾讯混元用 "token"
+  timeoutMs?: number;  // 单独超时（毫秒），默认 30s
 }
 
 // 6 家提供商默认接入参数（全部兼容 OpenAI /chat/completions 格式）
@@ -53,6 +54,7 @@ const PROVIDERS: Record<ProviderKey, ProviderDef> = {
     model: 'doubao-lite-4k',
     envKey: 'DOUBAO_API_KEY',
     envModel: 'DOUBAO_MODEL', // 豆包需填接入点ID，用环境变量覆盖
+    timeoutMs: 60_000, // 豆包首次冷启动/推理较慢，单独放宽到 60s
   },
   siliconflow: {
     key: 'siliconflow', label: '硅基流动',
@@ -144,6 +146,7 @@ export interface ResolvedProvider {
   model: string;
   apiKey: string;
   authPrefix: string; // Authorization 头前缀
+  timeoutMs: number;  // 超时毫秒数
 }
 
 /** 解析单个提供商的完整配置（Key 为空返回 null）；指定 model 时校验白名单 */
@@ -168,7 +171,7 @@ function resolveOne(key: ProviderKey, model?: string): ResolvedProvider | null {
   } else {
     resolvedModel = (def.envModel && process.env[def.envModel]) || getSystemConfig(`ai_model_${def.key}`) || def.model;
   }
-  return { key: def.key, label: def.label, baseURL, model: resolvedModel, apiKey, authPrefix: def.authPrefix || 'Bearer' };
+  return { key: def.key, label: def.label, baseURL, model: resolvedModel, apiKey, authPrefix: def.authPrefix || 'Bearer', timeoutMs: def.timeoutMs || 30_000 };
 }
 
 /**
@@ -327,7 +330,7 @@ export async function callAI(options: CallAIOptions): Promise<CallAIResult> {
     return { ok: false, content: '', provider: '-', error: 'AI_PROVIDER_NOT_CONFIGURED' };
   }
 
-  const timeoutMs = options.timeoutMs ?? 30_000;
+  const timeoutMs = options.timeoutMs ?? provider.timeoutMs;
   const maxRetries = options.maxRetries ?? 2;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
