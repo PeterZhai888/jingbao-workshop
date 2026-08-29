@@ -63,13 +63,19 @@ export function initializeDatabase(options?: { quiet?: boolean }): void {
   const nmDir = path.resolve(process.cwd(), 'node_modules');
   log('  node_modules/ 存在: ' + fs.existsSync(nmDir));
 
-  const bsDirCandidates = [
-    path.resolve(nmDir, 'better-sqlite3'),
-    path.resolve(nmDir, '.pnpm/better-sqlite3@13.0.3/node_modules/better-sqlite3'),
-  ];
+  const bsDirCandidates = [path.resolve(nmDir, 'better-sqlite3')];
   for (const d of bsDirCandidates) {
     log('  检查 ' + d + ' → ' + fs.existsSync(d));
     if (fs.existsSync(d)) {
+      // 读取实际安装的版本号，确认部署的依赖版本正确
+      try {
+        const bsPkg = JSON.parse(fs.readFileSync(path.resolve(d, 'package.json'), 'utf-8')) as {
+          version?: string;
+        };
+        log('  better-sqlite3 实际版本: ' + (bsPkg.version ?? '未知'));
+      } catch {
+        log('  ⚠️ 无法读取 better-sqlite3 版本号');
+      }
       // 列 prebuilds 目录
       const prebuildsDir = path.resolve(d, 'prebuilds');
       if (fs.existsSync(prebuildsDir)) {
