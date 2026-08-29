@@ -37,8 +37,8 @@ export const CONFIG = {
   JWT_SECRET: process.env.JWT_SECRET || DEV_FALLBACK_JWT_SECRET,
   JWT_EXPIRES_HOURS: 24,
 
-  // SQLite 数据库路径（相对项目根）
-  DB_PATH: process.env.DB_PATH || './data/ai-video-tool.db',
+  // SQLite 数据库路径（优先环境变量；默认用 /app/data 确保 Railway 容器可写）
+  DB_PATH: process.env.DB_PATH || '/app/data/jingbao.db',
 
   // 默认卡密有效期（天）
   CARD_VALID_DAYS: parseInt(process.env.CARD_VALID_DAYS || '30', 10),

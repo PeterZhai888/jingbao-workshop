@@ -107,6 +107,9 @@ export function initializeDatabase(options?: { quiet?: boolean }): void {
     if (!fs.existsSync(dbDir)) {
       log('  创建 DB 目录...');
       fs.mkdirSync(dbDir, { recursive: true });
+      log('  ✅ DB 目录已就绪: ' + dbDir);
+    } else {
+      log('  DB 目录已存在，跳过创建');
     }
     log('🗄️ new Database() ...');
     _db = new DatabaseCtor(resolvedDbPath);
