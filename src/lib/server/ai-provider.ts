@@ -47,7 +47,7 @@ const PROVIDERS: Record<ProviderKey, ProviderDef> = {
     baseURL: 'https://tokenhub.tencentmaas.com/v1',
     model: 'hy3',
     envKey: 'HUNYUAN_API_KEY',
-    authPrefix: 'token', // 腾讯混元要求 "Authorization: token xxx"，不是 "Bearer xxx"
+    // TokenHub 官方文档（2026-08-28 版）明确 OpenAI 兼容路径使用标准 "Authorization: Bearer xxx"
   },
   doubao: {
     key: 'doubao', label: '字节豆包',
@@ -121,7 +121,6 @@ export const MODEL_CATALOG: Record<ProviderKey, CatalogModel[]> = {
   hunyuan: [
     { id: 'hy3', label: 'hy3 · 默认（已开通）', tier: 'standard', note: '均衡之选，文案质量佳' },
     { id: 'hy4-preview', label: 'hy4-preview · 高质量旗舰（已开通）', tier: 'plus', note: '更强创意，适合精写' },
-    { id: 'hy3-preview', label: 'hy3-preview · 旧版（2026-08-31 下线，不推荐）', tier: 'standard', note: '旧版模型，即将下线' },
   ],
   doubao: [
     { id: 'doubao-lite-4k', label: 'Seed-2.0-lite · 极速（默认）', tier: 'fast', note: '速度快，日常生成推荐' },
@@ -147,6 +146,11 @@ function getSystemConfig(key: string): string | null {
   }
 }
 
+/** 提供商是否启用（system_config 里 ai_enabled_xxx = '0' 表示手动停用；缺省 = 启用） */
+function isProviderEnabled(key: ProviderKey): boolean {
+  return getSystemConfig(`ai_enabled_${key}`) !== '0';
+}
+
 export interface ResolvedProvider {
   key: ProviderKey;
   label: string;
@@ -157,10 +161,11 @@ export interface ResolvedProvider {
   timeoutMs: number;  // 超时毫秒数
 }
 
-/** 解析单个提供商的完整配置（Key 为空返回 null）；指定 model 时校验白名单 */
+/** 解析单个提供商的完整配置（Key 为空或已停用返回 null）；指定 model 时校验白名单 */
 function resolveOne(key: ProviderKey, model?: string): ResolvedProvider | null {
   const def = PROVIDERS[key];
   if (!def) return null;
+  if (!isProviderEnabled(key)) return null;
   const keyFromDb = getSystemConfig(`ai_key_${def.key}`);
   // 库中 Key 可能是 AES-256-GCM 密文（enc:v1: 前缀）或历史明文，decryptSecret 均兼容
   // deepseek 额外兼容通用变量 LLM_API_KEY（部署文档推荐的填法）
@@ -235,6 +240,7 @@ export function listProviders() {
       label: def.label,
       defaultModel: def.model,
       currentModel,
+      enabled: isProviderEnabled(k),
       // 当前模型是否来自后台自定义（非预设清单内 → 自定义；或存了 ai_model_ 也算自定义选择）
       modelCustom: !!getSystemConfig(`ai_model_${def.key}`) && !MODEL_CATALOG[k].some((m) => m.id === currentModel),
       models: MODEL_CATALOG[k],
@@ -269,6 +275,7 @@ export function listUserModels() {
   const access = getTierAccess();
   const defaultProvider = (getSystemConfig('default_provider') as ProviderKey | null) || 'qwen';
   const providers = PROVIDER_KEYS.filter((k) => {
+    if (!isProviderEnabled(k)) return false;
     const def = PROVIDERS[k];
     return !!(getSystemConfig(`ai_key_${def.key}`) || process.env[def.envKey] || (k === 'deepseek' && process.env.LLM_API_KEY));
   });

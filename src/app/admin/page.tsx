@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import {
   Dialog,
   DialogContent,
@@ -881,6 +882,7 @@ interface ProviderInfo {
   models: ModelOption[];
   configured: boolean;
   configuredFrom: string;
+  enabled: boolean;
 }
 
 interface ConfigData {
@@ -1200,6 +1202,30 @@ function ConfigPanel({ token }: { token: string }) {
     }
   };
 
+  // 启用/停用单家服务商（停用后用户端下拉不再展示，调用与回退自动跳过）
+  const [togglingKey, setTogglingKey] = useState<string | null>(null);
+  const handleToggleEnabled = async (provider: ProviderInfo) => {
+    setTogglingKey(provider.key);
+    try {
+      const res = await fetch('/api/admin/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ [`ai_enabled_${provider.key}`]: provider.enabled ? '0' : '1' }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(provider.enabled ? `${provider.label} 已停用` : `${provider.label} 已启用`);
+        load();
+      } else {
+        toast.error(data.error || '操作失败');
+      }
+    } catch {
+      toast.error('网络错误');
+    } finally {
+      setTogglingKey(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="py-20 text-center">
@@ -1397,7 +1423,10 @@ function ConfigPanel({ token }: { token: string }) {
         </CardHeader>
         <CardContent className="space-y-3">
           {providers.map((p) => (
-            <div key={p.key} className="rounded-xl border border-border/60 p-4">
+            <div
+              key={p.key}
+              className={`rounded-xl border border-border/60 p-4 transition-opacity ${p.enabled ? '' : 'opacity-55'}`}
+            >
               <div className="flex flex-wrap items-center gap-3 mb-3">
                 <span className="font-semibold text-sm">{p.label}</span>
                 {p.configured ? (
@@ -1409,7 +1438,21 @@ function ConfigPanel({ token }: { token: string }) {
                     <KeyRound className="h-3 w-3" /> 未配置
                   </Badge>
                 )}
+                {!p.enabled && (
+                  <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
+                    已停用
+                  </Badge>
+                )}
                 <span className="text-xs text-muted-foreground ml-auto font-mono">当前模型：{p.currentModel}</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground">{p.enabled ? '启用' : '停用'}</span>
+                  <Switch
+                    checked={p.enabled}
+                    disabled={togglingKey === p.key}
+                    onCheckedChange={() => handleToggleEnabled(p)}
+                    title="停用后：用户端下拉不再展示该服务商，AI 调用与自动回退均跳过它"
+                  />
+                </div>
                 {p.configuredFrom === '后台配置' && (
                   <Button
                     variant="ghost"

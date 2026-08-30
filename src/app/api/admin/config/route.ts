@@ -6,7 +6,7 @@ import { listProviders, PROVIDER_KEYS } from '@/lib/server/ai-provider';
 import { isUsingFallbackJwtSecret } from '@/lib/server/config';
 import { encryptSecret, isEncryptionEnabled } from '@/lib/server/secret-box';
 
-type ConfKey = 'default_provider' | 'daily_limit' | 'qps_limit' | 'tier_access' | 'service_paused' | 'global_daily_limit' | 'exhausted_tip' | `ai_key_${string}`;
+type ConfKey = 'default_provider' | 'daily_limit' | 'qps_limit' | 'tier_access' | 'service_paused' | 'global_daily_limit' | 'exhausted_tip' | `ai_key_${string}` | `ai_enabled_${string}`;
 
 export function GET(request: NextRequest) {
   const auth = authenticateAdmin(request);
@@ -101,6 +101,14 @@ export async function POST(request: NextRequest) {
       if (v.length > 200) {
         return NextResponse.json({ success: false, error: '引导文案不能超过200字' }, { status: 400 });
       }
+      write.run(key, v);
+    } else if (key.startsWith('ai_enabled_')) {
+      // 单家提供商启用/停用开关：'1'=启用 / '0'=停用（停用后用户端不展示、调用与回退均跳过）
+      const provider = key.slice('ai_enabled_'.length);
+      if (!PROVIDER_KEYS.includes(provider as never)) {
+        return NextResponse.json({ success: false, error: `未知提供商: ${provider}` }, { status: 400 });
+      }
+      const v = raw === true || raw === '1' || raw === 1 ? '1' : '0';
       write.run(key, v);
     } else if (key.startsWith('ai_key_')) {
       // 在线填写某家提供商的 API Key（如 ai_key_deepseek）
