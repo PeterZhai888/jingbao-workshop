@@ -178,3 +178,9 @@ Desktop.ini
 .babelrc.*
 babel.config.*
 assets/
+
+# Old project artifacts
+public/cockpit.html
+DESIGN.md
+.coze
+.trae-html-share-packages/
