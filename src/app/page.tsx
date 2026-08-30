@@ -216,11 +216,12 @@ export default function HomePage() {
             </CardHeader>
             <CardContent className="space-y-3">
               {[
-                '文本转分镜脚本 · 每日充足额度',
-                'AI爆款标题生成 · 每日充足额度',
-                '云端历史记录 · 随时回看复用',
-                '多模型切换 · 通义/智谱/Deepseek等',
-                '激活后30天内有效',
+                '爆款标题一键生成 · 一次10条，多风格全覆盖',
+                '专业分镜脚本 · 文案粘进来直接能开拍',
+                '五大AI模型随便换 · 不满意一秒重生成',
+                '高级要求定制 · 加一句话，AI就听你的',
+                '生成历史云端留存 · 随时回看一键复用',
+                '失败不扣次数 · 每一次都花在结果上',
               ].map((item) => (
                 <div key={item} className="flex items-start gap-2 text-sm">
                   <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
@@ -229,7 +230,7 @@ export default function HomePage() {
               ))}
               <div className="mt-4 rounded-lg bg-slate-50 p-3 text-xs text-muted-foreground border border-border/60 flex gap-2 items-start">
                 <Clock className="h-4 w-4 mt-0.5 shrink-0" />
-                <span>每日额度每天 0 点自动重置，有效期内均可使用</span>
+                <span>每日额度每天 0 点自动重置，时长内每天都能用</span>
               </div>
             </CardContent>
           </Card>
@@ -308,9 +309,9 @@ export default function HomePage() {
                   <div className="rounded-lg bg-slate-50 border border-border/60 p-4 text-sm text-muted-foreground">
                     <div className="font-semibold text-foreground mb-2">💡 如何获取卡密？</div>
                     <ol className="list-decimal list-inside space-y-1 text-xs leading-relaxed">
-                      <li>在私域（小红书/微信）联系客服获取卡密</li>
-                      <li>客服通过管理后台生成专属 30 天卡密</li>
-                      <li>收到卡密后在上方输入框粘贴激活即可</li>
+                      <li>在小红书/微信联系客服，按需购买卡密</li>
+                      <li>时长随你选：月卡 / 季卡 / 半年卡 / 年卡都支持</li>
+                      <li>收到卡密后在上方输入框粘贴，即刻开用</li>
                     </ol>
                   </div>
                 </>
