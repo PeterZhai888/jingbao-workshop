@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useCardAuth } from '@/lib/card-auth';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -10,6 +11,7 @@ import {
   Sparkles,
   Copy,
   CheckCircle2,
+  ChevronDown,
   Loader2,
   TrendingUp,
   Hash,
@@ -54,6 +56,8 @@ function detectStyle(title: string): string {
 export function TitlesTool() {
   const { session, refreshUsage, logout } = useCardAuth();
   const [topic, setTopic] = useState('');
+  const [extra, setExtra] = useState('');
+  const [extraOpen, setExtraOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [titles, setTitles] = useState<string[] | null>(null);
   const [meta, setMeta] = useState<{ id: string; topic: string } | null>(null);
@@ -84,7 +88,7 @@ export function TitlesTool() {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${session?.token}`,
           },
-          body: JSON.stringify({ topic, provider: model.provider, model: model.model }),
+          body: JSON.stringify({ topic, provider: model.provider, model: model.model, extra: extra.trim() || undefined }),
         });
         const data = await res.json();
         if (!res.ok || !data.success) {
@@ -176,6 +180,31 @@ export function TitlesTool() {
                 {topic.length}/2000 字
               </span>
             </div>
+          </div>
+          {/* 高级要求（可选）：默认收起，不干扰主流程 */}
+          <div>
+            <button
+              type="button"
+              onClick={() => setExtraOpen((v) => !v)}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${extraOpen ? 'rotate-180' : ''}`} />
+              高级要求（可选）
+            </button>
+            {extraOpen && (
+              <div className="mt-2">
+                <Input
+                  placeholder={'如：每条不超过20字 / 多带悬念感 / 避免"绝了"这类词'}
+                  value={extra}
+                  maxLength={100}
+                  onChange={(e) => setExtra(e.target.value)}
+                  className="text-sm"
+                />
+                <div className="mt-1 text-right text-xs text-muted-foreground">
+                  <span className={extra.length > 90 ? 'text-destructive font-medium' : ''}>{extra.length}/100</span>
+                </div>
+              </div>
+            )}
           </div>
           <div className="flex flex-col sm:flex-row gap-2">
             <Button

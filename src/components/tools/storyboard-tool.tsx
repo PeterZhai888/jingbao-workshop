@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useCardAuth } from '@/lib/card-auth';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -10,6 +11,7 @@ import {
   Clapperboard,
   Copy,
   Download,
+  ChevronDown,
   Loader2,
   Clock,
   Camera,
@@ -49,6 +51,8 @@ const MOCK_SHOTS: StoryboardShot[] = [
 export function StoryboardTool() {
   const { session, refreshUsage, logout } = useCardAuth();
   const [inputText, setInputText] = useState('');
+  const [extra, setExtra] = useState('');
+  const [extraOpen, setExtraOpen] = useState(false);
   const [shotCount, setShotCount] = useState(10); // 分镜数量 3-15，默认 10
   const [customMode, setCustomMode] = useState(false);
   const [customInput, setCustomInput] = useState('');
@@ -101,7 +105,7 @@ export function StoryboardTool() {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${session?.token}`,
           },
-          body: JSON.stringify({ text: inputText, count: effectiveCount, provider: model.provider, model: model.model }),
+          body: JSON.stringify({ text: inputText, count: effectiveCount, provider: model.provider, model: model.model, extra: extra.trim() || undefined }),
         });
         const data = await res.json();
         if (!res.ok || !data.success) {
@@ -217,6 +221,32 @@ export function StoryboardTool() {
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span>{inputText.length} 字</span>
               <span>建议 100-2000 字</span>
+            </div>
+
+            {/* 高级要求（可选）：默认收起，不干扰主流程 */}
+            <div>
+              <button
+                type="button"
+                onClick={() => setExtraOpen((v) => !v)}
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${extraOpen ? 'rotate-180' : ''}`} />
+                高级要求（可选）
+              </button>
+              {extraOpen && (
+                <div className="mt-2">
+                  <Input
+                    placeholder="如：画面偏日系清新风 / 每个镜头都有人物出镜 / 台词口语化"
+                    value={extra}
+                    maxLength={100}
+                    onChange={(e) => setExtra(e.target.value)}
+                    className="text-sm"
+                  />
+                  <div className="mt-1 text-right text-xs text-muted-foreground">
+                    <span className={extra.length > 90 ? 'text-destructive font-medium' : ''}>{extra.length}/100</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* 分镜数量选择：快捷档位 + 自定义 */}

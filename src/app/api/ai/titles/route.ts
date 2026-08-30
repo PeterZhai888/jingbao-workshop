@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  let body: { topic?: string; provider?: string; model?: string } = {};
+  let body: { topic?: string; provider?: string; model?: string; extra?: string } = {};
   try {
     body = await request.json();
   } catch {
@@ -77,6 +77,8 @@ export async function POST(request: NextRequest) {
   const topic = (body.topic || '').trim();
   if (!topic) return NextResponse.json({ success: false, error: '缺少主题' }, { status: 400 });
   if (topic.length > 2000) return NextResponse.json({ success: false, error: '内容过长，请精简到2000字以内' }, { status: 400 });
+  // 用户补充要求（可选）：拼入 System Prompt 作为额外指令层，与文案内容隔离
+  const extra = (body.extra || '').trim().slice(0, 100);
 
   const sens = checkSensitive(topic);
   if (!sens.ok) {
@@ -128,7 +130,7 @@ export async function POST(request: NextRequest) {
 
   const ai = await callAI({
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: extra ? `${SYSTEM_PROMPT}\n【用户补充要求】${extra}` : SYSTEM_PROMPT },
       { role: 'user', content: `视频主题或完整文案：\n${topic}` },
     ],
     maxRetries: 1, // 超时重试同样消耗豆包 token，控制在最多 2 次尝试

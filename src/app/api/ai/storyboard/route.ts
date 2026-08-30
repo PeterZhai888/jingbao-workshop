@@ -13,8 +13,8 @@ import { checkGlobalGuard } from '@/lib/server/service-guard';
 import type { StoryboardShot } from '@/lib/types';
 
 // 分镜生成的系统 Prompt：要求输出严格 JSON（镜头数量由用户指定）
-function buildSystemPrompt(count: number): string {
-  return `你是专业的短视频分镜编剧。根据用户的视频文案，输出一份分镜脚本。
+function buildSystemPrompt(count: number, extra?: string): string {
+  const base = `你是专业的短视频分镜编剧。根据用户的视频文案，输出一份分镜脚本。
 要求：
 1. 输出恰好 ${count} 个镜头，不多不少。
 2. 严格只输出 JSON 数组，不要任何解释文字、不要 markdown 代码块之外的说明。
@@ -27,6 +27,7 @@ function buildSystemPrompt(count: number): string {
 4. 分镜节奏要适配抖音/快手/视频号竖屏短视频，前 3 秒必须抓住观众。
 示例输出格式：
 [{"shotNumber":1,"sceneDescription":"...","dialogue":"旁白：...","duration":"3秒","cameraMove":"固定机位"}]`;
+  return extra ? `${base}\n【用户补充要求】${extra}` : base;
 }
 
 // 降级用的通用分镜模板（AI 失败时不扣次数，直接返回结构化提示）
@@ -67,7 +68,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  let body: { text?: string; count?: number; provider?: string; model?: string } = {};
+  let body: { text?: string; count?: number; provider?: string; model?: string; extra?: string } = {};
   try {
     body = await request.json();
   } catch {
@@ -76,6 +77,8 @@ export async function POST(request: NextRequest) {
   const text = (body.text || '').trim();
   if (!text) return NextResponse.json({ success: false, error: '缺少输入文本' }, { status: 400 });
   if (text.length > 5000) return NextResponse.json({ success: false, error: '文本过长，请精简到5000字以内' }, { status: 400 });
+  // 用户补充要求（可选）：拼入 System Prompt 作为额外指令层，与文案内容隔离
+  const extra = (body.extra || '').trim().slice(0, 100);
 
   // 分镜数量：3-15 任意整数，默认 10
   const parsedCount = parseInt(String(body.count ?? 10), 10);
@@ -132,7 +135,7 @@ export async function POST(request: NextRequest) {
 
   const ai = await callAI({
     messages: [
-      { role: 'system', content: buildSystemPrompt(count) },
+      { role: 'system', content: buildSystemPrompt(count, extra) },
       { role: 'user', content: `视频文案：\n${text}` },
     ],
     maxRetries: 1, // 超时重试同样消耗豆包 token，控制在最多 2 次尝试
