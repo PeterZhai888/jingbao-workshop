@@ -56,10 +56,12 @@ type NoticeConfig = {
 
 const DISMISS_KEY = 'ai_video_tool_notice_dismissed';
 
-/** 全站顶部公告横幅：从 /api/public/config 拉取，关闭记忆基于 localStorage（内容变更时自动重新弹出） */
+/** 全站顶部公告横幅：从 /api/public/config 拉取，关闭记忆基于 localStorage（内容变更时自动重新弹出）
+ * 文字滑 2 圈后自动静止，鼠标 hover 可再次触发 */
 function NoticeBanner() {
   const [notice, setNotice] = useState<NoticeConfig | null>(null);
   const [hidden, setHidden] = useState(false);
+  const [animated, setAnimated] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -70,7 +72,7 @@ function NoticeBanner() {
         const n = data?.notice;
         if (n?.enabled && n.content) {
           setNotice(n);
-          // 关闭记忆：用内容 hash 作为标识，内容变了重新弹出
+          // 关闭记忆：用内容作为标识，内容变了重新弹出
           try {
             const dismissed = localStorage.getItem(DISMISS_KEY);
             if (dismissed === n.content) setHidden(true);
@@ -79,6 +81,16 @@ function NoticeBanner() {
       })
       .catch(() => { /* 静默失败 */ });
     return () => { cancelled = true; };
+  }, []);
+
+  // 注入 marquee keyframes（只注入一次）
+  useEffect(() => {
+    const id = 'notice-marquee-style';
+    if (typeof document === 'undefined' || document.getElementById(id)) return;
+    const style = document.createElement('style');
+    style.id = id;
+    style.textContent = `@keyframes notice-marquee{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}`;
+    document.head.appendChild(style);
   }, []);
 
   if (!notice || hidden) return null;
@@ -117,12 +129,29 @@ function NoticeBanner() {
     setHidden(true);
   };
 
+  // 滑 2 圈后切换为静止；hover 可再次触发动画
+  const handleAnimationEnd = () => setAnimated(false);
+  const handleMouseEnter = () => setAnimated(true);
+
   return (
     <div className={`w-full ${styles.bg} ${styles.border} border-b`}>
       <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2 sm:px-6">
         <Icon className={`h-4 w-4 shrink-0 ${styles.text}`} />
-        <div className={`flex-1 text-xs sm:text-sm ${styles.text} truncate`} title={notice.content}>
-          {notice.content}
+        <div
+          className={`flex-1 overflow-hidden text-xs sm:text-sm ${styles.text}`}
+          onMouseEnter={handleMouseEnter}
+        >
+          <div
+            key={animated ? 'a' : 's'}
+            className={`whitespace-nowrap ${animated ? 'will-change-transform' : 'truncate'}`}
+            style={animated ? {
+              animation: 'notice-marquee 18s linear 2',
+            } : undefined}
+            onAnimationEnd={animated ? handleAnimationEnd : undefined}
+            title={notice.content}
+          >
+            {notice.content}
+          </div>
         </div>
         {notice.link && (
           <a
