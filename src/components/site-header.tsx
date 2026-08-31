@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useCardAuth } from '@/lib/card-auth';
 import { Button } from '@/components/ui/button';
 import {
@@ -13,6 +13,8 @@ import {
   Menu,
   X,
   Home,
+  RefreshCcw,
+  Loader2,
 } from 'lucide-react';
 import { useState } from 'react';
 import {
@@ -23,6 +25,16 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { toast } from 'sonner';
 import { SITE_NAME } from '@/lib/site';
 
 const navItems = [
@@ -33,14 +45,33 @@ const navItems = [
 
 export function SiteHeader() {
   const pathname = usePathname();
-  const router = useRouter();
-  const { session, logout } = useCardAuth();
+  const { session, logout, verifyCard } = useCardAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [switchOpen, setSwitchOpen] = useState(false);
+  const [switchCode, setSwitchCode] = useState('');
+  const [switchLoading, setSwitchLoading] = useState(false);
 
-  // 管理后台路径单独处理
   const isAdmin = pathname?.startsWith('/admin');
 
   if (isAdmin) return null;
+
+  const handleSwitch = async () => {
+    const code = switchCode.trim().toUpperCase();
+    if (!/^SP-[A-Z0-9]{12}$/.test(code)) {
+      toast.error('卡密格式错误（应为 SP- 开头，后跟 12 位大写字母数字）');
+      return;
+    }
+    setSwitchLoading(true);
+    try {
+      const ok = await verifyCard(code);
+      if (ok) {
+        setSwitchOpen(false);
+        setSwitchCode('');
+      }
+    } finally {
+      setSwitchLoading(false);
+    }
+  };
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-border/60 bg-white/80 backdrop-blur-md">
@@ -103,8 +134,8 @@ export function SiteHeader() {
                     {session.cardCode}
                   </div>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => router.push('/admin')} className="gap-2">
-                    <Shield className="h-4 w-4" /> 管理后台
+                  <DropdownMenuItem onClick={() => setSwitchOpen(true)} className="gap-2">
+                    <RefreshCcw className="h-4 w-4" /> 切换卡密
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={logout} className="gap-2 text-destructive focus:text-destructive">
@@ -160,7 +191,7 @@ export function SiteHeader() {
             })}
             {session && (
               <>
-                <div className="px-3 py-2 border-t border-border/60 mt-2 pt-3">
+                <div className="px-3 py-2 border-t border-border/60 mt-2 pt-3 space-y-2">
                   <div className="flex items-center justify-between">
                     <Badge variant="secondary" className="font-mono text-xs">
                       今日 {session.dailyUsed}/{session.dailyLimit}
@@ -169,15 +200,48 @@ export function SiteHeader() {
                       <LogOut className="h-4 w-4" /> 退出
                     </Button>
                   </div>
-                  <div className="text-xs text-muted-foreground mt-1.5">
+                  <div className="text-xs text-muted-foreground">
                     有效期至 {new Date(session.cardExpiresAt).toLocaleDateString('zh-CN')}
                   </div>
+                  <Button size="sm" variant="outline" className="w-full gap-1.5" onClick={() => { setSwitchOpen(true); setMobileOpen(false); }}>
+                    <RefreshCcw className="h-4 w-4" /> 切换卡密
+                  </Button>
                 </div>
               </>
             )}
           </div>
         </div>
       )}
+
+      {/* 切换卡密弹窗 */}
+      <Dialog open={switchOpen} onOpenChange={(open) => { if (!open) setSwitchCode(''); setSwitchOpen(open); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>切换卡密</DialogTitle>
+            <DialogDescription>输入新的卡密，验证成功后将替换当前账号（不影响任何已保存的历史记录）</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <div className="text-xs text-muted-foreground">
+              当前卡密：<span className="font-mono">{session?.cardCode}</span>
+            </div>
+            <Input
+              placeholder="SP-XXXXXXXXXXXX"
+              value={switchCode}
+              onChange={(e) => setSwitchCode(e.target.value.toUpperCase())}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSwitch(); }}
+              className="font-mono uppercase"
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setSwitchOpen(false)}>取消</Button>
+            <Button onClick={handleSwitch} disabled={switchLoading}>
+              {switchLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+              验证并切换
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </header>
   );
 }

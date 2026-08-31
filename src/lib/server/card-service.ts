@@ -45,10 +45,12 @@ export function isCardUsable(card: CardRow): { ok: boolean; reason?: string } {
   }
 }
 
-/** 激活卡密（首次验证通过时调用） */
+/** 激活卡密（首次验证通过时调用）：按卡密自身 valid_days 计算有效期 */
 export function activateCard(cardId: number): void {
+  const card = getCardById(cardId);
+  const validDays = card?.valid_days ?? CONFIG.CARD_VALID_DAYS;
   const now = new Date().toISOString();
-  const expire = new Date(Date.now() + CONFIG.CARD_VALID_DAYS * 24 * 3600 * 1000).toISOString();
+  const expire = new Date(Date.now() + validDays * 24 * 3600 * 1000).toISOString();
   db.prepare(
     `UPDATE cards SET status = 'active', activated_at = COALESCE(activated_at, ?), expires_at = COALESCE(expires_at, ?) WHERE id = ?`,
   ).run(now, expire, cardId);
