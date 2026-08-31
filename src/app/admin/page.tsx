@@ -1146,6 +1146,12 @@ function ConfigPanel({ token }: { token: string }) {
   // 次数用尽引导文案
   const [exhaustedTip, setExhaustedTip] = useState('');
   const [tipSaving, setTipSaving] = useState(false);
+  // 全站顶部公告
+  const [noticeEnabled, setNoticeEnabled] = useState(false);
+  const [noticeContent, setNoticeContent] = useState('');
+  const [noticeLink, setNoticeLink] = useState('');
+  const [noticeType, setNoticeType] = useState<'info' | 'warning' | 'danger'>('info');
+  const [noticeSaving, setNoticeSaving] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1159,6 +1165,12 @@ function ConfigPanel({ token }: { token: string }) {
         setApiKeyEncrypted(data.security?.apiKeyEncrypted !== false);
         if (data.guard) setGuard(data.guard);
         setExhaustedTip(data.exhaustedTip || '');
+        if (data.notice) {
+          setNoticeEnabled(!!data.notice.enabled);
+          setNoticeContent(data.notice.content || '');
+          setNoticeLink(data.notice.link || '');
+          setNoticeType(data.notice.type || 'info');
+        }
       }
     } catch {
       toast.error('加载配置失败');
@@ -1244,6 +1256,37 @@ function ConfigPanel({ token }: { token: string }) {
       toast.error('网络错误');
     } finally {
       setTipSaving(false);
+    }
+  };
+
+  // 保存全站顶部公告
+  const handleSaveNotice = async () => {
+    if (noticeEnabled && !noticeContent.trim()) {
+      toast.error('启用公告时必须填写公告内容');
+      return;
+    }
+    setNoticeSaving(true);
+    try {
+      const res = await fetch('/api/admin/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...withAuth(token) },
+        body: JSON.stringify({
+          notice_enabled: noticeEnabled ? '1' : '0',
+          notice_content: noticeContent.trim(),
+          notice_link: noticeLink.trim(),
+          notice_type: noticeType,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(noticeEnabled ? '公告已发布' : '公告已关闭');
+      } else {
+        toast.error(data.error || '保存失败');
+      }
+    } catch {
+      toast.error('网络错误');
+    } finally {
+      setNoticeSaving(false);
     }
   };
 
@@ -1499,6 +1542,88 @@ function ConfigPanel({ token }: { token: string }) {
             <Button onClick={handleSaveTip} disabled={tipSaving} className="gap-1.5">
               {tipSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
               保存文案
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 全站顶部公告 */}
+      <Card className={noticeEnabled ? 'border-amber-400/50' : undefined}>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <MessageCircle className={`h-5 w-5 ${noticeEnabled ? 'text-amber-500' : 'text-muted-foreground'}`} />
+            全站顶部公告
+            {noticeEnabled && <Badge variant="secondary" className="text-xs font-normal">已发布</Badge>}
+          </CardTitle>
+          <CardDescription>
+            在用户端所有页面顶部展示一条可关闭的公告栏（如域名迁移、内测通知等）；关闭开关即可隐藏
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between rounded-lg border border-border/60 p-3">
+            <div className="space-y-0.5">
+              <div className="text-sm font-medium">启用公告</div>
+              <div className="text-xs text-muted-foreground">开启后立即在用户端生效</div>
+            </div>
+            <Switch checked={noticeEnabled} onCheckedChange={setNoticeEnabled} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">公告内容</label>
+            <Textarea
+              placeholder="例如：⚠️ 域名迁移通知：请访问 xxx.com 继续使用，旧域名即将下线"
+              value={noticeContent}
+              onChange={(e) => setNoticeContent(e.target.value.slice(0, 300))}
+              className="min-h-[80px] resize-y text-sm"
+            />
+            <div className="flex justify-between">
+              <span className={`text-xs ${noticeContent.length > 280 ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
+                {noticeContent.length}/300 字
+              </span>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">跳转链接（可选）</label>
+            <Input
+              placeholder="https://..."
+              value={noticeLink}
+              onChange={(e) => setNoticeLink(e.target.value)}
+              className="text-sm"
+            />
+            <span className="text-xs text-muted-foreground">填写后公告栏会显示"前往"按钮，点击跳转到该链接</span>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">样式类型</label>
+            <div className="flex gap-2">
+              {(['info', 'warning', 'danger'] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                    noticeType === t
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'border-border/60 bg-background text-muted-foreground hover:border-primary/50'
+                  }`}
+                  onClick={() => setNoticeType(t)}
+                >
+                  {t === 'info' ? 'ℹ️ 信息（蓝）' : t === 'warning' ? '⚠️ 警告（黄）' : '🚨 紧急（红）'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="text-xs text-muted-foreground">
+              预览：
+              <span className={`ml-2 rounded px-2 py-0.5 text-xs ${
+                noticeType === 'info' ? 'bg-sky-50 text-sky-700 border border-sky-200' :
+                noticeType === 'warning' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                'bg-rose-50 text-rose-700 border border-rose-200'
+              }`}>
+                {noticeContent || '公告内容预览'}
+              </span>
+            </div>
+            <Button onClick={handleSaveNotice} disabled={noticeSaving} className="gap-1.5">
+              {noticeSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+              {noticeEnabled ? '发布公告' : '保存设置'}
             </Button>
           </div>
         </CardContent>

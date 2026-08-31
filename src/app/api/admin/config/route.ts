@@ -6,7 +6,7 @@ import { listProviders, PROVIDER_KEYS } from '@/lib/server/ai-provider';
 import { isUsingFallbackJwtSecret } from '@/lib/server/config';
 import { encryptSecret, isEncryptionEnabled } from '@/lib/server/secret-box';
 
-type ConfKey = 'default_provider' | 'daily_limit' | 'qps_limit' | 'tier_access' | 'service_paused' | 'global_daily_limit' | 'exhausted_tip' | `ai_key_${string}` | `ai_enabled_${string}`;
+type ConfKey = 'default_provider' | 'daily_limit' | 'qps_limit' | 'tier_access' | 'service_paused' | 'global_daily_limit' | 'exhausted_tip' | 'notice_enabled' | 'notice_content' | 'notice_link' | 'notice_type' | `ai_key_${string}` | `ai_enabled_${string}`;
 
 export function GET(request: NextRequest) {
   const auth = authenticateAdmin(request);
@@ -33,6 +33,13 @@ export function GET(request: NextRequest) {
     },
     // 次数用尽引导文案（空 = 不提示）
     exhaustedTip: map.exhausted_tip || '',
+    // 全站顶部公告
+    notice: {
+      enabled: map.notice_enabled === '1',
+      content: map.notice_content || '',
+      link: map.notice_link || '',
+      type: (map.notice_type || 'info') as 'info' | 'warning' | 'danger',
+    },
     // 安全状态：JWT 密钥仍在用开发默认值时提醒（生产模式会在服务端拒绝启动，此标记主要覆盖开发/预览环境）
     security: {
       usingFallbackJwtSecret: isUsingFallbackJwtSecret,
@@ -100,6 +107,27 @@ export async function POST(request: NextRequest) {
       const v = String(raw ?? '').trim();
       if (v.length > 200) {
         return NextResponse.json({ success: false, error: '引导文案不能超过200字' }, { status: 400 });
+      }
+      write.run(key, v);
+    } else if (key === 'notice_enabled') {
+      const v = raw === true || raw === '1' || raw === 1 ? '1' : '0';
+      write.run(key, v);
+    } else if (key === 'notice_content') {
+      const v = String(raw ?? '').trim();
+      if (v.length > 300) {
+        return NextResponse.json({ success: false, error: '公告内容不能超过300字' }, { status: 400 });
+      }
+      write.run(key, v);
+    } else if (key === 'notice_link') {
+      const v = String(raw ?? '').trim();
+      if (v && v.length > 300) {
+        return NextResponse.json({ success: false, error: '公告链接不能超过300字符' }, { status: 400 });
+      }
+      write.run(key, v);
+    } else if (key === 'notice_type') {
+      const v = String(raw ?? '').trim();
+      if (!['info', 'warning', 'danger'].includes(v)) {
+        return NextResponse.json({ success: false, error: '公告样式类型非法' }, { status: 400 });
       }
       write.run(key, v);
     } else if (key.startsWith('ai_enabled_')) {
