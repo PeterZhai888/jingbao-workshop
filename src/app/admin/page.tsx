@@ -52,6 +52,7 @@ import {
   Loader2,
   ShieldCheck,
   RefreshCw,
+  CalendarClock,
   LogOut,
   Home,
   CreditCard,
@@ -282,6 +283,10 @@ function CardsPanel({ token }: { token: string }) {
   const [genLoading, setGenLoading] = useState(false);
   // 删除确认弹窗（待删的 unused 卡密列表）
   const [deleteTarget, setDeleteTarget] = useState<string[] | null>(null);
+  // 续期弹窗（待续期的卡密 + 延长天数）
+  const [renewCard, setRenewCard] = useState<CardRow | null>(null);
+  const [renewDays, setRenewDays] = useState('30');
+  const [renewLoading, setRenewLoading] = useState(false);
 
   const pageSize = 15;
 
@@ -326,6 +331,36 @@ function CardsPanel({ token }: { token: string }) {
       }
     } catch {
       toast.error('网络错误');
+    }
+  };
+
+  // 续期卡密（仅激活/已过期卡可续期，历史记录保留在原卡密下）
+  const handleRenew = async () => {
+    if (!renewCard) return;
+    const days = parseInt(renewDays, 10);
+    if (!Number.isInteger(days) || days < 1 || days > 365) {
+      toast.error('延长天数需在 1-365 之间');
+      return;
+    }
+    setRenewLoading(true);
+    try {
+      const res = await fetch('/api/admin/cards/renew', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...withAuth(token) },
+        body: JSON.stringify({ cardId: renewCard.id, addDays: days }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`${renewCard.code} 已续期 ${days} 天${data.expiresAt ? `，新到期日 ${String(data.expiresAt).slice(0, 10)}` : ''}`);
+        setRenewCard(null);
+        load();
+      } else {
+        toast.error(data.error || '续期失败');
+      }
+    } catch {
+      toast.error('网络错误');
+    } finally {
+      setRenewLoading(false);
     }
   };
 
@@ -490,6 +525,11 @@ function CardsPanel({ token }: { token: string }) {
                   <TableCell className="hidden md:table-cell text-xs text-muted-foreground max-w-[140px] truncate">{c.remark || '—'}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
+                      {(c.status === 'active' || c.status === 'expired') && (
+                        <Button size="icon" variant="ghost" className="h-8 w-8 text-amber-600" title="续期" onClick={() => { setRenewCard(c); setRenewDays('30'); }}>
+                          <CalendarClock className="h-4 w-4" />
+                        </Button>
+                      )}
                       {c.status === 'active' && (
                         <Button size="icon" variant="ghost" className="h-8 w-8 text-sky-600" title="冻结" onClick={() => handleSetStatus(c.code, 'frozen')}>
                           <Snowflake className="h-4 w-4" />
@@ -556,6 +596,59 @@ function CardsPanel({ token }: { token: string }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* 续期弹窗 */}
+      <Dialog open={!!renewCard} onOpenChange={(open) => { if (!open) setRenewCard(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>卡密续期</DialogTitle>
+            <DialogDescription>
+              延长卡密使用期限，历史记录保留在原卡密下不丢失；已过期卡续期后自动恢复为已激活。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-sm text-muted-foreground">卡密</span>
+              <span className="font-mono text-xs font-semibold break-all">{renewCard?.code}</span>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-sm text-muted-foreground">当前状态</span>
+              <StatusBadge status={renewCard?.status || ''} />
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-sm text-muted-foreground">原到期日</span>
+              <span className="text-xs">{renewCard?.expires_at?.slice(0, 10) || '—'}</span>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">延长天数（1-365）</label>
+              <Input type="number" min={1} max={365} value={renewDays} onChange={(e) => setRenewDays(e.target.value)} />
+              <div className="flex flex-wrap gap-1 pt-0.5">
+                {QUICK_VALID_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.days}
+                    type="button"
+                    className={`rounded-full border px-2 py-0.5 text-xs transition-colors ${
+                      renewDays === String(opt.days)
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-border/60 bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground'
+                    }`}
+                    onClick={() => setRenewDays(String(opt.days))}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setRenewCard(null)}>取消</Button>
+            <Button onClick={handleRenew} disabled={renewLoading}>
+              {renewLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+              确认续期
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* 生成弹窗 */}
       <Dialog open={genOpen} onOpenChange={(open) => { setGenOpen(open); if (!open) { setGenResult(null); setGenCopied(false); } }}>

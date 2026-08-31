@@ -135,6 +135,25 @@ export function writeUsageLog(params: {
   );
 }
 
+/** 续期：延长激活/已过期卡密的有效期（从"现在"与"原到期日"较晚者起加 addDays；过期卡自动恢复 active） */
+export function renewCardExpiry(cardId: number, addDays: number): { ok: boolean; message?: string } {
+  const card = getCardById(cardId);
+  if (!card) return { ok: false, message: '卡密不存在' };
+  if (card.status !== 'active' && card.status !== 'expired') {
+    return { ok: false, message: `仅激活/已过期卡可续期（当前状态：${card.status}）` };
+  }
+  const now = Date.now();
+  const currentExpiry = card.expires_at ? new Date(card.expires_at).getTime() : now;
+  const newExpiry = new Date(Math.max(currentExpiry, now) + addDays * 24 * 3600 * 1000);
+  db.prepare(
+    `UPDATE cards SET
+       expires_at = ?,
+       status = CASE WHEN status = 'expired' THEN 'active' ELSE status END
+     WHERE id = ?`,
+  ).run(newExpiry.toISOString(), cardId);
+  return { ok: true };
+}
+
 /** 状态变更：冻结/解冻/作废 */
 export function setCardStatus(code: string, status: CardStatus): boolean {
   const result = db.prepare(`UPDATE cards SET status = ? WHERE code = ?`).run(status, code);
