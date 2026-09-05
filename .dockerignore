@@ -1,0 +1,17 @@
+# Docker 构建上下文排除 —— 只传必要文件，加快构建且避免冲突
+node_modules
+*/node_modules
+dist
+*/dist
+.env
+*.log
+*.sqlite
+*.db
+server/data
+server/data/backups
+.git
+.github
+.trae-html-share-packages
+.uploads
+.DS_Store
+*.md
