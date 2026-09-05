@@ -1,4 +1,5 @@
-import Database from 'better-sqlite3'
+// 使用 Node 内置 SQLite（node:sqlite），零原生依赖，彻底避免 Docker 部署时原生模块编译/ABI 兼容问题
+import { DatabaseSync } from 'node:sqlite'
 import crypto from 'node:crypto'
 import path from 'node:path'
 import fs from 'node:fs'
@@ -8,8 +9,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DATA_DIR = path.join(__dirname, '..', 'data')
 fs.mkdirSync(DATA_DIR, { recursive: true })
 
-const db = new Database(path.join(DATA_DIR, 'app.db'))
-db.pragma('journal_mode = WAL')
+const db = new DatabaseSync(path.join(DATA_DIR, 'app.db'))
+db.exec('PRAGMA journal_mode = WAL')
 
 /* ---------------- 建表 ---------------- */
 

@@ -159,7 +159,8 @@ router.post('/cards/generate', requireAdmin, (req, res) => {
     'INSERT INTO cards (code, type, duration_months, trial_quota) VALUES (?, ?, ?, ?)',
   )
   const codes = []
-  db.transaction(() => {
+  db.exec('BEGIN')
+  try {
     for (let i = 0; i < count; i++) {
       let code
       do {
@@ -168,7 +169,11 @@ router.post('/cards/generate', requireAdmin, (req, res) => {
       insert.run(code, type, durationMonths, trialQuota)
       codes.push(code)
     }
-  })()
+    db.exec('COMMIT')
+  } catch (err) {
+    db.exec('ROLLBACK')
+    throw err
+  }
   log(null, 'admin_generate', `生成 ${count} 张 ${type} 卡密`, req)
   res.json({ codes })
 })

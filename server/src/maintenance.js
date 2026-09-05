@@ -19,25 +19,27 @@ export function cleanOldLogs() {
   }
 }
 
-/** 数据库备份：使用 SQLite 在线备份 API，写入 data/backups/ 目录 */
+/** 数据库备份：VACUUM INTO 生成压缩快照，写入 data/backups/ 目录 */
 export function backupDatabase() {
-  fs.mkdirSync(BACKUP_DIR, { recursive: true })
-  const stamp = new Date().toISOString().slice(0, 10)
-  const target = path.join(BACKUP_DIR, `app-${stamp}.db`)
-  db.backup(target)
-    .then(() => {
-      console.log(`[maintenance] 数据库已备份：${target}`)
-      // 清理过期备份
-      const files = fs
-        .readdirSync(BACKUP_DIR)
-        .filter((f) => f.startsWith('app-') && f.endsWith('.db'))
-        .sort()
-      while (files.length > MAX_BACKUPS) {
-        const oldest = files.shift()
-        fs.unlinkSync(path.join(BACKUP_DIR, oldest))
-      }
-    })
-    .catch((err) => console.error('[maintenance] 备份失败:', err.message))
+  try {
+    fs.mkdirSync(BACKUP_DIR, { recursive: true })
+    const stamp = new Date().toISOString().slice(0, 10)
+    const target = path.join(BACKUP_DIR, `app-${stamp}.db`)
+    if (fs.existsSync(target)) fs.unlinkSync(target) // VACUUM INTO 要求目标文件不存在
+    db.exec(`VACUUM INTO '${target.replace(/'/g, "''")}'`)
+    console.log(`[maintenance] 数据库已备份：${target}`)
+    // 清理过期备份
+    const files = fs
+      .readdirSync(BACKUP_DIR)
+      .filter((f) => f.startsWith('app-') && f.endsWith('.db'))
+      .sort()
+    while (files.length > MAX_BACKUPS) {
+      const oldest = files.shift()
+      fs.unlinkSync(path.join(BACKUP_DIR, oldest))
+    }
+  } catch (err) {
+    console.error('[maintenance] 备份失败:', err.message)
+  }
 }
 
 /** 启动时执行一次 + 定时调度 */
