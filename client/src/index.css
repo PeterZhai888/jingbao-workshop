@@ -19,8 +19,6 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
     "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   -webkit-font-smoothing: antialiased;
-  /* 兜底：任何漏网元素都不允许把页面撑出横向滚动 */
-  overflow-x: hidden;
 }
 
 /* 滚动条美化 */

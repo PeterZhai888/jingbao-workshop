@@ -138,8 +138,8 @@ export default function Storyboard() {
                   <span className="font-medium text-gray-900">镜头 {s.index}</span>
                   <span>{s.duration} · {s.camera}</span>
                 </div>
-                <p className="mt-2 break-words text-sm text-gray-700">{s.visual}</p>
-                <p className="mt-2 break-words text-sm text-gray-600">{s.narration}</p>
+                <p className="mt-2 text-sm text-gray-700">{s.visual}</p>
+                <p className="mt-2 text-sm text-gray-600">{s.narration}</p>
               </div>
             ))}
           </div>
