@@ -85,15 +85,15 @@ export default function History() {
                         <span>镜头 {s.index}</span>
                         <span>{s.duration} · {s.camera}</span>
                       </div>
-                      <p className="mt-0.5 text-gray-700">{s.visual}</p>
-                      <p className="mt-0.5 text-gray-600">{s.narration}</p>
+                      <p className="mt-0.5 break-words text-gray-700">{s.visual}</p>
+                      <p className="mt-0.5 break-words text-gray-600">{s.narration}</p>
                     </div>
                   ))}
                 </div>
               ) : (
                 <ol className="space-y-1">
                   {item.output.map((t, i) => (
-                    <li key={i} className="text-sm text-gray-700">
+                    <li key={i} className="break-words text-sm text-gray-700">
                       <span className="mr-2 tabular-nums text-gray-300">{i + 1}.</span>
                       {t}
                     </li>
