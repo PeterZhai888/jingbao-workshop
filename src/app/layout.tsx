@@ -46,7 +46,7 @@ export default function RootLayout({
         {isDev && <Inspector />}
         <CardAuthProvider>
           <SiteHeader />
-          <main className="mx-auto w-full max-w-6xl px-4 sm:px-6 py-6 sm:py-10">
+          <main className="mx-auto w-full max-w-6xl px-4 sm:px-6 py-6 sm:py-10 overflow-x-hidden">
             {children}
           </main>
           <footer className="border-t border-border/60 bg-white/60 mt-12">

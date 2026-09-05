@@ -299,7 +299,7 @@ export default function HistoryPage() {
           </Card>
 
           {/* 详情 */}
-          <Card className="lg:col-span-3 border-border/60">
+          <Card className="lg:col-span-3 border-border/60 min-w-0">
             <CardHeader className="flex-row items-start justify-between space-y-0 gap-3 flex-wrap">
               <div>
                 <CardTitle className="text-lg">
@@ -378,7 +378,7 @@ export default function HistoryPage() {
                       <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${inputExpanded ? 'rotate-180' : ''}`} />
                     </button>
                     {inputExpanded && (
-                      <p className="px-4 pb-4 pt-0 text-sm leading-relaxed text-muted-foreground whitespace-pre-wrap">
+                      <p className="px-4 pb-4 pt-0 text-sm leading-relaxed text-muted-foreground whitespace-pre-wrap break-words">
                         {selected.inputText}
                       </p>
                     )}
@@ -398,8 +398,8 @@ export default function HistoryPage() {
                               <Badge variant="secondary" className="bg-primary text-primary-foreground">
                                 镜头 {String(shot.shotNumber).padStart(2, '0')}
                               </Badge>
-                              <Badge variant="outline" className="text-xs">时长 {shot.duration}</Badge>
-                              <Badge variant="outline" className="text-xs text-fuchsia-700 border-fuchsia-200 bg-fuchsia-50/50">
+                              <Badge variant="outline" className="text-xs whitespace-normal shrink">时长 {shot.duration}</Badge>
+                              <Badge variant="outline" className="text-xs text-fuchsia-700 border-fuchsia-200 bg-fuchsia-50/50 whitespace-normal shrink">
                                 {shot.cameraMove}
                               </Badge>
                               <button
@@ -412,12 +412,12 @@ export default function HistoryPage() {
                             </div>
                             <div className="text-sm">
                               <span className="font-semibold text-xs">画面 · </span>
-                              <span className="leading-relaxed">{shot.sceneDescription}</span>
+                              <span className="leading-relaxed break-words">{shot.sceneDescription}</span>
                             </div>
                             {shot.dialogue && (
                               <div className="mt-2 rounded-lg bg-slate-50 border-l-2 border-indigo-400 px-3 py-2 text-sm">
                                 <span className="font-semibold text-indigo-600 text-xs">台词 · </span>
-                                <span>{shot.dialogue}</span>
+                                <span className="break-words">{shot.dialogue}</span>
                               </div>
                             )}
                           </div>

@@ -443,22 +443,22 @@ export function StoryboardTool() {
                         <Badge variant="secondary" className="bg-primary text-primary-foreground border-primary/20">
                           镜头 {String(shot.shotNumber).padStart(2, '0')}
                         </Badge>
-                        <Badge variant="outline" className="gap-1">
-                          <Clock className="h-3 w-3" /> {shot.duration}
+                        <Badge variant="outline" className="gap-1 whitespace-normal shrink">
+                          <Clock className="h-3 w-3 shrink-0" /> {shot.duration}
                         </Badge>
-                        <Badge variant="outline" className="gap-1 text-fuchsia-700 border-fuchsia-200 bg-fuchsia-50/50">
-                          <Camera className="h-3 w-3" /> {shot.cameraMove}
+                        <Badge variant="outline" className="gap-1 text-fuchsia-700 border-fuchsia-200 bg-fuchsia-50/50 whitespace-normal shrink">
+                          <Camera className="h-3 w-3 shrink-0" /> {shot.cameraMove}
                         </Badge>
                       </div>
                       <div className="space-y-2 text-sm">
                         <div>
                           <span className="font-semibold text-primary text-xs">画面 · </span>
-                          <span className="leading-relaxed">{shot.sceneDescription}</span>
+                          <span className="leading-relaxed break-words">{shot.sceneDescription}</span>
                         </div>
                         {shot.dialogue && (
                           <div className="rounded-lg bg-slate-50 border-l-2 border-indigo-400 px-3 py-2 text-slate-700">
                             <span className="font-semibold text-indigo-600 text-xs">台词/旁白 · </span>
-                            <span>{shot.dialogue}</span>
+                            <span className="break-words">{shot.dialogue}</span>
                           </div>
                         )}
                       </div>
