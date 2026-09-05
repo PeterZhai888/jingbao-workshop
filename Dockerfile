@@ -19,5 +19,5 @@ COPY --from=client-build /app/client/dist /app/client/dist
 
 ENV PORT=3000
 EXPOSE 3000
-VOLUME ["/app/server/data"]
+# 注意：Railway 不支持 Dockerfile VOLUME，需在 Railway 控制台手动挂载 Volume 到 /app/server/data
 CMD ["node", "src/index.js"]
