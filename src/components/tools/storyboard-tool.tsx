@@ -23,6 +23,7 @@ import {
 import { toast } from 'sonner';
 import { ModelSelector, type ModelSelection } from '@/components/model-selector';
 import { GeneratingProgress } from '@/components/generating-progress';
+import { FeedbackDialog, type FeedbackContext } from '@/components/feedback-dialog';
 import type { StoryboardShot, StoryboardResult } from '@/lib/types';
 import {
   Table,
@@ -61,6 +62,14 @@ export function StoryboardTool() {
   const [resultMeta, setResultMeta] = useState<{ id: string; title: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const [model, setModel] = useState<ModelSelection>({ cost: 1 });
+  // 错误反馈：生成失败时 toast 上带"反馈"按钮，自动附带失败上下文
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [feedbackContext, setFeedbackContext] = useState<FeedbackContext | undefined>();
+
+  const openErrorFeedback = (error: string) => {
+    setFeedbackContext({ tool: '分镜脚本', model: model.model || model.provider, error: error.slice(0, 300) });
+    setFeedbackOpen(true);
+  };
 
   // 自定义输入的合法值（3-15 整数）
   const customParsed = parseInt(customInput, 10);
@@ -127,7 +136,10 @@ export function StoryboardTool() {
             toast.error(`${data.error}\n${data.tip}`, { duration: 6000 });
             return;
           }
-          toast.error(data.error || '生成失败，请稍后再试');
+          toast.error(data.error || '生成失败，请稍后再试', {
+            duration: 6000,
+            action: { label: '反馈', onClick: () => openErrorFeedback(data.error || '生成失败') },
+          });
           return;
         }
         setResult(data.shots as StoryboardShot[]);
@@ -137,7 +149,10 @@ export function StoryboardTool() {
       }
     } catch (e) {
       console.error(e);
-      toast.error('网络错误，请稍后再试');
+      toast.error('网络错误，请稍后再试', {
+        duration: 6000,
+        action: { label: '反馈', onClick: () => openErrorFeedback('网络错误') },
+      });
     } finally {
       setLoading(false);
     }
@@ -505,6 +520,9 @@ export function StoryboardTool() {
           </CardContent>
         </Card>
       </div>
+
+      {/* 错误反馈弹窗（生成失败时从 toast 按钮唤起） */}
+      <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} presetType="bug" presetContext={feedbackContext} />
     </div>
   );
 }

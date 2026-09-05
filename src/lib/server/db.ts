@@ -224,6 +224,22 @@ export function initializeDatabase(options?: { quiet?: boolean }): void {
       value TEXT NOT NULL,
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS feedback (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      card_code TEXT NOT NULL,
+      type TEXT NOT NULL,
+      content TEXT NOT NULL,
+      contact TEXT,
+      context TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      admin_reply TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status);
+    CREATE INDEX IF NOT EXISTS idx_feedback_card ON feedback(card_code);
+    CREATE INDEX IF NOT EXISTS idx_feedback_created ON feedback(created_at);
   `);
 
   // ========= 初始化默认管理员（如不存在） =========

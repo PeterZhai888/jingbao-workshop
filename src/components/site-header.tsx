@@ -20,7 +20,9 @@ import {
   Info,
   AlertTriangle,
   AlertOctagon,
+  MessageSquare,
 } from 'lucide-react';
+import { FeedbackDialog } from '@/components/feedback-dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -183,6 +185,7 @@ export function SiteHeader() {
   const [switchOpen, setSwitchOpen] = useState(false);
   const [switchCode, setSwitchCode] = useState('');
   const [switchLoading, setSwitchLoading] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   const isAdmin = pathname?.startsWith('/admin');
 
@@ -257,6 +260,16 @@ export function SiteHeader() {
                     有效期至 {new Date(session.cardExpiresAt).toLocaleDateString('zh-CN')}
                   </div>
                 </div>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-9 w-9 text-muted-foreground hover:text-primary"
+                  onClick={() => setFeedbackOpen(true)}
+                  title="意见反馈"
+                  aria-label="意见反馈"
+                >
+                  <MessageSquare className="h-4 w-4" />
+                </Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button size="sm" variant="outline" className="gap-1.5">
@@ -341,6 +354,9 @@ export function SiteHeader() {
                     <Button size="sm" variant="outline" className="w-full gap-1.5" onClick={() => { setSwitchOpen(true); setMobileOpen(false); }}>
                       <RefreshCcw className="h-4 w-4" /> 切换卡密
                     </Button>
+                    <Button size="sm" variant="ghost" className="w-full gap-1.5 text-muted-foreground" onClick={() => { setFeedbackOpen(true); setMobileOpen(false); }}>
+                      <MessageSquare className="h-4 w-4" /> 意见反馈
+                    </Button>
                   </div>
                 </>
               )}
@@ -377,6 +393,9 @@ export function SiteHeader() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* 意见反馈弹窗 */}
+        <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
       </header>
     </>
   );

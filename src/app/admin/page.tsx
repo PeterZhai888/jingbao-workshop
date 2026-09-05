@@ -1760,7 +1760,7 @@ const TIER_BUCKET_META: Record<number, { label: string; barCls: string }> = {
 };
 
 function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout: () => void }) {
-  const [tab, setTab] = useState<'cards' | 'logs' | 'config' | 'maintain'>('cards');
+  const [tab, setTab] = useState<'cards' | 'logs' | 'config' | 'feedback' | 'maintain'>('cards');
   const [stats, setStats] = useState<StatsData | null>(null);
 
   const loadStats = useCallback(async () => {
@@ -1792,6 +1792,7 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
     { key: 'cards' as const, label: '卡密管理', icon: CreditCard },
     { key: 'logs' as const, label: '使用日志', icon: ScrollText },
     { key: 'config' as const, label: '系统配置', icon: Settings },
+    { key: 'feedback' as const, label: '用户反馈', icon: MessageCircle },
     { key: 'maintain' as const, label: '数据维护', icon: Database },
   ];
 
@@ -1957,6 +1958,7 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
       {tab === 'cards' && <CardsPanel token={session.token} />}
       {tab === 'logs' && <LogsPanel token={session.token} />}
       {tab === 'config' && <ConfigPanel token={session.token} />}
+      {tab === 'feedback' && <FeedbackPanel token={session.token} />}
       {tab === 'maintain' && <MaintenancePanel token={session.token} />}
     </div>
   );
@@ -2057,6 +2059,278 @@ function ChangePasswordDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ========= Tab: 用户反馈 =========
+interface FeedbackRow {
+  id: number;
+  card_code: string;
+  type: string;
+  content: string;
+  contact: string | null;
+  context: string | null;
+  status: string;
+  admin_reply: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+const FEEDBACK_TYPE_META: Record<string, { label: string; cls: string }> = {
+  bug: { label: '问题反馈', cls: 'bg-rose-50 text-rose-700 border-rose-200' },
+  feature: { label: '功能建议', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  question: { label: '使用咨询', cls: 'bg-sky-50 text-sky-700 border-sky-200' },
+  other: { label: '其他', cls: 'bg-slate-50 text-slate-600 border-slate-200' },
+};
+
+const FEEDBACK_STATUS_META: Record<string, { label: string; cls: string }> = {
+  pending: { label: '待处理', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+  replied: { label: '已回复', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  closed: { label: '已关闭', cls: 'bg-slate-50 text-slate-500 border-slate-200' },
+};
+
+function FeedbackPanel({ token }: { token: string }) {
+  const [rows, setRows] = useState<FeedbackRow[]>([]);
+  const [counts, setCounts] = useState<Record<string, number>>({ all: 0, pending: 0, replied: 0, closed: 0 });
+  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'replied' | 'closed'>('all');
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  // 回复状态：当前展开回复框的反馈 id + 草稿
+  const [replyId, setReplyId] = useState<number | null>(null);
+  const [replyDraft, setReplyDraft] = useState('');
+  const [replySaving, setReplySaving] = useState(false);
+  // 展开错误上下文的反馈 id
+  const [ctxOpenId, setCtxOpenId] = useState<number | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/admin/feedback?status=${filterStatus}&page=${page}&pageSize=10`, {
+        headers: withAuth(token),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setRows(data.rows as FeedbackRow[]);
+        setTotal(data.total);
+        setCounts(data.counts);
+      } else {
+        toast.error(data.error || '加载反馈失败');
+      }
+    } catch {
+      toast.error('网络错误，加载反馈失败');
+    } finally {
+      setLoading(false);
+    }
+  }, [token, filterStatus, page]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const handleSaveReply = async (id: number, close = false) => {
+    const reply = replyDraft.trim();
+    if (!close && reply.length === 0) {
+      toast.error('请先填写回复内容');
+      return;
+    }
+    setReplySaving(true);
+    try {
+      const res = await fetch('/api/admin/feedback', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...withAuth(token) },
+        body: JSON.stringify(close ? { id, status: 'closed' } : { id, adminReply: reply }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        toast.error(data.error || '操作失败');
+        return;
+      }
+      toast.success(close ? '反馈已关闭' : '回复已保存');
+      setReplyId(null);
+      setReplyDraft('');
+      load();
+    } catch {
+      toast.error('网络错误，操作失败');
+    } finally {
+      setReplySaving(false);
+    }
+  };
+
+  const totalPages = Math.max(Math.ceil(total / 10), 1);
+
+  const chips: Array<{ key: 'all' | 'pending' | 'replied' | 'closed'; label: string }> = [
+    { key: 'all', label: '全部' },
+    { key: 'pending', label: '待处理' },
+    { key: 'replied', label: '已回复' },
+    { key: 'closed', label: '已关闭' },
+  ];
+
+  return (
+    <div className="space-y-4">
+      {/* 状态筛选 chips */}
+      <div className="flex flex-wrap items-center gap-2">
+        {chips.map((c) => (
+          <button
+            key={c.key}
+            onClick={() => { setFilterStatus(c.key); setPage(1); }}
+            className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm transition-colors ${
+              filterStatus === c.key
+                ? 'border-primary bg-primary text-primary-foreground'
+                : 'border-border bg-white text-muted-foreground hover:border-primary/40 hover:text-foreground'
+            }`}
+          >
+            {c.label}
+            <span className={`rounded-full px-1.5 text-xs ${filterStatus === c.key ? 'bg-primary-foreground/20' : 'bg-muted'}`}>
+              {counts[c.key] ?? 0}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {/* 反馈列表 */}
+      {loading ? (
+        <div className="py-16 text-center text-muted-foreground">
+          <Loader2 className="mx-auto h-6 w-6 animate-spin mb-2" />
+          加载中...
+        </div>
+      ) : rows.length === 0 ? (
+        <Card className="border-border/60">
+          <CardContent className="py-16 text-center text-muted-foreground">
+            <MessageCircle className="mx-auto h-10 w-10 mb-3 opacity-40" />
+            暂无反馈
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {rows.map((f) => {
+            const typeMeta = FEEDBACK_TYPE_META[f.type] || FEEDBACK_TYPE_META.other;
+            const statusMeta = FEEDBACK_STATUS_META[f.status] || FEEDBACK_STATUS_META.pending;
+            let ctx: Record<string, unknown> | null = null;
+            if (f.context) {
+              try { ctx = JSON.parse(f.context); } catch { ctx = null; }
+            }
+            return (
+              <Card key={f.id} className={`border-border/60 ${f.status === 'pending' ? 'border-amber-200/70' : ''}`}>
+                <CardContent className="space-y-3 pt-5">
+                  {/* 头部：类型 + 状态 + 卡密 + 时间 */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline" className={typeMeta.cls}>{typeMeta.label}</Badge>
+                    <Badge variant="outline" className={statusMeta.cls}>{statusMeta.label}</Badge>
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      {f.created_at?.slice(0, 16).replace('T', ' ')}
+                    </span>
+                  </div>
+                  <div className="text-xs text-muted-foreground font-mono">
+                    卡密：{f.card_code}
+                  </div>
+
+                  {/* 反馈内容 */}
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{f.content}</p>
+
+                  {/* 联系方式 */}
+                  {f.contact && (
+                    <div className="text-xs text-muted-foreground">
+                      联系方式：<span className="text-foreground font-medium">{f.contact}</span>
+                    </div>
+                  )}
+
+                  {/* 错误上下文（错误入口自动附带） */}
+                  {ctx && (
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => setCtxOpenId(ctxOpenId === f.id ? null : f.id)}
+                        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {ctxOpenId === f.id ? '收起' : '展开'}操作信息（自动附带）
+                      </button>
+                      {ctxOpenId === f.id && (
+                        <pre className="mt-1.5 rounded-lg bg-muted/60 border border-border/60 p-3 text-xs overflow-auto max-h-40 font-mono leading-relaxed">
+{JSON.stringify(ctx, null, 2)}
+                        </pre>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 已有回复 */}
+                  {f.admin_reply && (
+                    <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-3">
+                      <div className="text-xs font-medium text-emerald-700 mb-1">我的回复</div>
+                      <p className="text-sm leading-relaxed text-emerald-900 whitespace-pre-wrap">{f.admin_reply}</p>
+                    </div>
+                  )}
+
+                  {/* 操作区：回复 / 关闭 */}
+                  {f.status !== 'closed' && (
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5 h-8"
+                        onClick={() => {
+                          if (replyId === f.id) { setReplyId(null); setReplyDraft(''); }
+                          else { setReplyId(f.id); setReplyDraft(f.admin_reply || ''); }
+                        }}
+                      >
+                        <MessageCircle className="h-3.5 w-3.5" />
+                        {replyId === f.id ? '取消回复' : f.admin_reply ? '修改回复' : '回复'}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 text-muted-foreground"
+                        disabled={replySaving}
+                        onClick={() => handleSaveReply(f.id, true)}
+                      >
+                        关闭反馈
+                      </Button>
+                    </div>
+                  )}
+                  {replyId === f.id && (
+                    <div className="space-y-2 rounded-lg border border-border/60 bg-muted/30 p-3">
+                      <Textarea
+                        placeholder="回复内容（仅后台留存记录，用户端暂不展示）"
+                        value={replyDraft}
+                        onChange={(e) => setReplyDraft(e.target.value.slice(0, 500))}
+                        className="min-h-[70px] text-sm bg-white"
+                      />
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground">{replyDraft.length}/500</span>
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="ghost" className="h-8" onClick={() => { setReplyId(null); setReplyDraft(''); }}>
+                            取消
+                          </Button>
+                          <Button size="sm" className="h-8" disabled={replySaving} onClick={() => handleSaveReply(f.id)}>
+                            {replySaving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                            保存回复
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {/* 分页 */}
+      {!loading && rows.length > 0 && (
+        <div className="flex items-center justify-between text-sm text-muted-foreground">
+          <span>共 {total} 条 · 第 {page}/{totalPages} 页</span>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+              <ChevronLeft className="h-4 w-4" /> 上一页
+            </Button>
+            <Button size="sm" variant="outline" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+              下一页 <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

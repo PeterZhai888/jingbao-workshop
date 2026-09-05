@@ -21,6 +21,7 @@ import {
 import { toast } from 'sonner';
 import { ModelSelector, type ModelSelection } from '@/components/model-selector';
 import { GeneratingProgress } from '@/components/generating-progress';
+import { FeedbackDialog, type FeedbackContext } from '@/components/feedback-dialog';
 
 const MOCK_TITLES = [
   '闺蜜以为我去了巴黎！其实就在这家藏在弄堂里的小店…',
@@ -63,6 +64,14 @@ export function TitlesTool() {
   const [meta, setMeta] = useState<{ id: string; topic: string } | null>(null);
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   const [model, setModel] = useState<ModelSelection>({ cost: 1 });
+  // 错误反馈：生成失败时 toast 上带"反馈"按钮，自动附带失败上下文
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [feedbackContext, setFeedbackContext] = useState<FeedbackContext | undefined>();
+
+  const openErrorFeedback = (error: string) => {
+    setFeedbackContext({ tool: '爆款标题', model: model.model || model.provider, error: error.slice(0, 300) });
+    setFeedbackOpen(true);
+  };
 
   const handleGenerate = async (useMock = false) => {
     if (!topic.trim()) {
@@ -110,7 +119,10 @@ export function TitlesTool() {
             toast.error(`${data.error}\n${data.tip}`, { duration: 6000 });
             return;
           }
-          toast.error(data.error || '生成失败，请稍后再试');
+          toast.error(data.error || '生成失败，请稍后再试', {
+            duration: 6000,
+            action: { label: '反馈', onClick: () => openErrorFeedback(data.error || '生成失败') },
+          });
           return;
         }
         setTitles(data.titles as string[]);
@@ -120,7 +132,10 @@ export function TitlesTool() {
       }
     } catch (e) {
       console.error(e);
-      toast.error('网络错误，请稍后再试');
+      toast.error('网络错误，请稍后再试', {
+        duration: 6000,
+        action: { label: '反馈', onClick: () => openErrorFeedback('网络错误') },
+      });
     } finally {
       setLoading(false);
     }
@@ -340,6 +355,9 @@ export function TitlesTool() {
           )}
         </CardContent>
       </Card>
+
+      {/* 错误反馈弹窗（生成失败时从 toast 按钮唤起） */}
+      <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} presetType="bug" presetContext={feedbackContext} />
     </div>
   );
 }
