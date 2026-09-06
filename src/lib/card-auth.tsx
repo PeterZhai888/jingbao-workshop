@@ -20,12 +20,16 @@ const FINGERPRINT_KEY = 'ai_video_tool_fp';
 /**
  * 从 response 中提取续期头，若有则更新 session（localStorage + state）。
  * 自动重置 token 过期定时器（因为 expiresAt 变了，useEffect 依赖会触发）。
+ * 注意：仅处理卡密侧 API 的续期头；管理后台 API（/api/admin/*）的续期头对应管理员 token，
+ * 写入用户端 session 会造成串号（用户端拿管理员 token 请求会被 401 踢出），必须跳过。
  */
 function applyRenewHeaders(
   response: Response,
+  requestUrl: string,
   getSession: () => AuthSession | null,
   setSession: (s: AuthSession | null) => void,
 ): void {
+  if (requestUrl.includes('/api/admin/')) return;
   const newToken = response.headers.get('X-Renewed-Token');
   const newExpiresAt = response.headers.get('X-Renewed-Expires-At');
   if (!newToken || !newExpiresAt) return;
@@ -68,7 +72,14 @@ export function CardAuthProvider({ children }: { children: ReactNode }) {
     window.fetch = async (...args: Parameters<typeof fetch>): Promise<Response> => {
       const response = await originalFetch(...args);
       try {
-        applyRenewHeaders(response, () => sessionRef.current, setSession);
+        // 提取请求 URL（string / URL / Request 三种形态），供拦截器区分卡密侧与管理侧 API
+        const input = args[0];
+        const requestUrl = typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.href
+            : input.url;
+        applyRenewHeaders(response, requestUrl, () => sessionRef.current, setSession);
       } catch { /* ignore */ }
       return response;
     };

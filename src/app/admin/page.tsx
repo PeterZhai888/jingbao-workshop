@@ -95,7 +95,7 @@ interface AdminSession {
 type AdminFetcher = (input: string, init?: RequestInit, silent401?: boolean) => Promise<Response>;
 
 function withAuth(token: string) {
-  return {  };
+  return { Authorization: `Bearer ${token}` };
 }
 
 const STATUS_META: Record<string, { label: string; cls: string }> = {
