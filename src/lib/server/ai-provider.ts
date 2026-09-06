@@ -451,38 +451,52 @@ function stripThinkBlocks(raw: string): string {
 }
 
 /**
- * 在字符串中从末尾反向搜索最后一个完整平衡的 JSON 块（[] 或 {}）。
- * 思路：答案永远在思考之后，从末尾往前找能避开思考里的示例数组污染。
- * 返回 { start, end+1 } 切片，找不到返回 null。
+ * 在字符串中定位最后一个完整平衡的 JSON 值（[] 或 {}）。
+ * 思路：答案永远在思考/示例之后——从文本末尾的最后一个闭括号（] 或 }）反向配对，
+ * 找到与之平衡的开括号，切出完整 JSON。注意必须从闭括号入手（而不是找最靠后的开括号）：
+ * 对象数组 [{"a":1},{"b":2}] 中最后的 { 比数组的 [ 更靠后，从开括号入手会把整个数组
+ * 截成最后一个元素对象；从闭括号反向配对则天然取到完整数组。
+ * 返回 { start, end } 切片下标（含两端），找不到返回 null。
  */
 function findLastBalancedJSON(text: string): { start: number; end: number } | null {
-  let lastOpenArr = -1;
-  let lastOpenObj = -1;
-  // 反向找最后一个未闭合的 [ 和 {
+  // 反向扫描时的转义判定：引号是否被转义，取决于它左边连续反斜杠的数量（奇数=被转义）。
+  // 不能用正向扫描的 escape 标记法——反向扫描先遇到 " 再遇到 \，标记位顺序是反的。
+  const isEscapedQuote = (i: number): boolean => {
+    let backslashes = 0;
+    for (let j = i - 1; j >= 0 && text[j] === '\\'; j--) backslashes++;
+    return backslashes % 2 === 1;
+  };
+
+  // 找最末尾的闭括号 ] 或 }（跳过字符串字面量内的括号：从末尾反向扫，维护 inStr）
+  let closeIdx = -1;
+  let inStr = false;
   for (let i = text.length - 1; i >= 0; i--) {
     const ch = text[i];
-    if (lastOpenArr === -1 && ch === '[') lastOpenArr = i;
-    if (lastOpenObj === -1 && ch === '{') lastOpenObj = i;
-    if (lastOpenArr !== -1 && lastOpenObj !== -1) break;
-  }
-  const openIdx = Math.max(lastOpenArr, lastOpenObj);
-  if (openIdx < 0) return null;
-  const openCh = text[openIdx];
-  const closeCh = openCh === '[' ? ']' : '}';
-  // 从 openIdx 往前做括号配对，跳过字符串内的括号
-  let depth = 0;
-  let inStr = false;
-  let escape = false;
-  for (let i = openIdx; i < text.length; i++) {
-    const ch = text[i];
-    if (escape) { escape = false; continue; }
-    if (ch === '\\') { escape = true; continue; }
-    if (ch === '"') { inStr = !inStr; continue; }
+    if (ch === '"') {
+      if (!isEscapedQuote(i)) inStr = !inStr;
+      continue;
+    }
     if (inStr) continue;
-    if (ch === openCh) depth++;
-    else if (ch === closeCh) {
+    if (ch === ']' || ch === '}') { closeIdx = i; break; }
+  }
+  if (closeIdx < 0) return null;
+  const closeCh = text[closeIdx];
+  const openCh = closeCh === ']' ? '[' : '{';
+
+  // 从 closeIdx 反向做括号配对，找到与之平衡的开括号
+  let depth = 0;
+  inStr = false;
+  for (let i = closeIdx; i >= 0; i--) {
+    const ch = text[i];
+    if (ch === '"') {
+      if (!isEscapedQuote(i)) inStr = !inStr;
+      continue;
+    }
+    if (inStr) continue;
+    if (ch === closeCh) depth++;
+    else if (ch === openCh) {
       depth--;
-      if (depth === 0) return { start: openIdx, end: i };
+      if (depth === 0) return { start: i, end: closeIdx };
     }
   }
   return null;
