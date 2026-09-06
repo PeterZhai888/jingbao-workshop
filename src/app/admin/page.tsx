@@ -83,14 +83,19 @@ const ADMIN_SESSION_KEY = 'ai_video_tool_admin_session';
 
 interface AdminSession {
   token: string;
+  /** JWT 过期时间（ISO 字符串），用于前端定时退出 */
+  expiresAt: string;
   admin: { id: number; username: string; role: string };
   /** 登录时检测：是否仍在使用出厂默认密码（true 时页面顶部显示提醒条） */
   usingDefaultPassword?: boolean;
 }
 
 // ========= 通用 =========
+/** 带鉴权的 fetch 包装类型：收到 401 时自动触发统一的过期处理 */
+type AdminFetcher = (input: string, init?: RequestInit, silent401?: boolean) => Promise<Response>;
+
 function withAuth(token: string) {
-  return { Authorization: `Bearer ${token}` };
+  return {  };
 }
 
 const STATUS_META: Record<string, { label: string; cls: string }> = {
@@ -170,6 +175,7 @@ function AdminLogin({ onLogin }: { onLogin: (s: AdminSession) => void }) {
       }
       const session: AdminSession = {
         token: data.token,
+        expiresAt: data.expiresAt,
         admin: data.admin,
         usingDefaultPassword: !!data.usingDefaultPassword,
       };
@@ -264,7 +270,7 @@ interface CardRow {
   created_at: string;
 }
 
-function CardsPanel({ token }: { token: string }) {
+function CardsPanel({ fetcher }: { fetcher: AdminFetcher }) {
   const [rows, setRows] = useState<CardRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -296,20 +302,18 @@ function CardsPanel({ token }: { token: string }) {
       const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
       if (searchCode.trim()) params.set('code', searchCode.trim());
       if (filterStatus !== 'all') params.set('status', filterStatus);
-      const res = await fetch(`/api/admin/cards?${params}`, { headers: withAuth(token) });
+      const res = await fetcher(`/api/admin/cards?${params}`);
       const data = await res.json();
       if (data.success) {
         setRows(data.items);
         setTotal(data.total);
-      } else if (res.status === 401) {
-        toast.error('登录已过期，请重新登录');
       }
     } catch {
       toast.error('加载卡密列表失败');
     } finally {
       setLoading(false);
     }
-  }, [token, page, searchCode, filterStatus]);
+  }, [fetcher, page, searchCode, filterStatus]);
 
   useEffect(() => {
     load();
@@ -317,9 +321,9 @@ function CardsPanel({ token }: { token: string }) {
 
   const handleSetStatus = async (code: string, status: 'frozen' | 'revoked' | 'active') => {
     try {
-      const res = await fetch('/api/admin/cards', {
+      const res = await fetcher('/api/admin/cards', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...withAuth(token) },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code, status }),
       });
       const data = await res.json();
@@ -344,9 +348,9 @@ function CardsPanel({ token }: { token: string }) {
     }
     setRenewLoading(true);
     try {
-      const res = await fetch('/api/admin/cards/renew', {
+      const res = await fetcher('/api/admin/cards/renew', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...withAuth(token) },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cardId: renewCard.id, addDays: days }),
       });
       const data = await res.json();
@@ -368,9 +372,9 @@ function CardsPanel({ token }: { token: string }) {
   const handleDeleteCards = async (codes: string[]) => {
     if (codes.length === 0) return;
     try {
-      const res = await fetch('/api/admin/cards', {
+      const res = await fetcher('/api/admin/cards', {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json', ...withAuth(token) },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ codes }),
       });
       const data = await res.json();
@@ -393,9 +397,9 @@ function CardsPanel({ token }: { token: string }) {
     }
     setGenLoading(true);
     try {
-      const res = await fetch('/api/admin/cards/generate', {
+      const res = await fetcher('/api/admin/cards/generate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...withAuth(token) },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           count,
           validDays: parseInt(genValidDays, 10) || 30,
@@ -766,7 +770,7 @@ const ACTION_LABELS: Record<string, string> = {
   admin_login: '管理员登录',
 };
 
-function LogsPanel({ token }: { token: string }) {
+function LogsPanel({ fetcher }: { fetcher: AdminFetcher }) {
   const [rows, setRows] = useState<LogRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -784,7 +788,7 @@ function LogsPanel({ token }: { token: string }) {
       const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
       if (searchCode.trim()) params.set('cardCode', searchCode.trim());
       if (filterAction !== 'all') params.set('action', filterAction);
-      const res = await fetch(`/api/admin/logs?${params}`, { headers: withAuth(token) });
+      const res = await fetcher(`/api/admin/logs?${params}`);
       const data = await res.json();
       if (data.success) {
         setRows(data.items);
@@ -795,7 +799,7 @@ function LogsPanel({ token }: { token: string }) {
     } finally {
       setLoading(false);
     }
-  }, [token, page, searchCode, filterAction]);
+  }, [fetcher, page, searchCode, filterAction]);
 
   useEffect(() => {
     load();
@@ -807,7 +811,7 @@ function LogsPanel({ token }: { token: string }) {
   const handleClean = async (keepDays: number) => {
     try {
       const url = keepDays > 0 ? `/api/admin/logs?keepDays=${keepDays}` : '/api/admin/logs';
-      const res = await fetch(url, { method: 'DELETE', headers: withAuth(token) });
+      const res = await fetcher(url, { method: 'DELETE' });
       const data = await res.json();
       if (data.success) {
         toast.success(`已清理 ${data.deleted} 条日志`);
@@ -995,11 +999,11 @@ interface GuardConfig {
 // 模型选择器：预设下拉（含价格档位）+ 自定义输入兜底
 function ModelSelector({
   provider,
-  token,
+  fetcher,
   onSaved,
 }: {
   provider: ProviderInfo;
-  token: string;
+  fetcher: AdminFetcher;
   onSaved: () => void;
 }) {
   const isInCatalog = provider.models.some((m) => m.id === provider.currentModel);
@@ -1026,9 +1030,9 @@ function ModelSelector({
     }
     setSaving(true);
     try {
-      const res = await fetch('/api/admin/config', {
+      const res = await fetcher('/api/admin/config', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json',  },
         body: JSON.stringify({ [`ai_model_${provider.key}`]: targetModel }),
       });
       const data = await res.json();
@@ -1048,9 +1052,9 @@ function ModelSelector({
   const handleResetDefault = async () => {
     setSaving(true);
     try {
-      const res = await fetch('/api/admin/config', {
+      const res = await fetcher('/api/admin/config', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json',  },
         body: JSON.stringify({ [`ai_model_${provider.key}`]: provider.defaultModel }),
       });
       const data = await res.json();
@@ -1128,7 +1132,7 @@ function ModelSelector({
   );
 }
 
-function ConfigPanel({ token }: { token: string }) {
+function ConfigPanel({ fetcher }: { fetcher: AdminFetcher }) {
   const [config, setConfig] = useState<ConfigData | null>(null);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1156,7 +1160,7 @@ function ConfigPanel({ token }: { token: string }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/config', { headers: withAuth(token) });
+      const res = await fetcher('/api/admin/config');
       const data = await res.json();
       if (data.success) {
         setConfig(data.config);
@@ -1177,7 +1181,7 @@ function ConfigPanel({ token }: { token: string }) {
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [fetcher]);
 
   useEffect(() => {
     load();
@@ -1187,9 +1191,9 @@ function ConfigPanel({ token }: { token: string }) {
     if (!config) return;
     setSaving(true);
     try {
-      const res = await fetch('/api/admin/config', {
+      const res = await fetcher('/api/admin/config', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...withAuth(token) },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           default_provider: config.defaultProvider,
           daily_limit: String(config.dailyLimit),
@@ -1215,9 +1219,9 @@ function ConfigPanel({ token }: { token: string }) {
     const next = { ...guard, ...patch };
     setGuardSaving(true);
     try {
-      const res = await fetch('/api/admin/config', {
+      const res = await fetcher('/api/admin/config', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...withAuth(token) },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           service_paused: next.servicePaused ? '1' : '0',
           global_daily_limit: String(next.globalDailyLimit),
@@ -1241,9 +1245,9 @@ function ConfigPanel({ token }: { token: string }) {
   const handleSaveTip = async () => {
     setTipSaving(true);
     try {
-      const res = await fetch('/api/admin/config', {
+      const res = await fetcher('/api/admin/config', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...withAuth(token) },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ exhausted_tip: exhaustedTip.trim() }),
       });
       const data = await res.json();
@@ -1267,9 +1271,9 @@ function ConfigPanel({ token }: { token: string }) {
     }
     setNoticeSaving(true);
     try {
-      const res = await fetch('/api/admin/config', {
+      const res = await fetcher('/api/admin/config', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...withAuth(token) },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           notice_enabled: noticeEnabled ? '1' : '0',
           notice_content: noticeContent.trim(),
@@ -1297,9 +1301,9 @@ function ConfigPanel({ token }: { token: string }) {
       return;
     }
     try {
-      const res = await fetch('/api/admin/config', {
+      const res = await fetcher('/api/admin/config', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...withAuth(token) },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ [`ai_key_${providerKey}`]: key }),
       });
       const data = await res.json();
@@ -1320,9 +1324,9 @@ function ConfigPanel({ token }: { token: string }) {
   // 清除某家服务商的全部配置（Key + 模型覆盖），即停用该服务商
   const handleClearProvider = async (provider: ProviderInfo) => {
     try {
-      const res = await fetch('/api/admin/config', {
+      const res = await fetcher('/api/admin/config', {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json',  },
         body: JSON.stringify({ provider: provider.key }),
       });
       const data = await res.json();
@@ -1343,9 +1347,9 @@ function ConfigPanel({ token }: { token: string }) {
   const handleToggleEnabled = async (provider: ProviderInfo) => {
     setTogglingKey(provider.key);
     try {
-      const res = await fetch('/api/admin/config', {
+      const res = await fetcher('/api/admin/config', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json',  },
         body: JSON.stringify({ [`ai_enabled_${provider.key}`]: provider.enabled ? '0' : '1' }),
       });
       const data = await res.json();
@@ -1694,7 +1698,7 @@ function ConfigPanel({ token }: { token: string }) {
                   <KeyRound className="h-4 w-4" /> 保存Key
                 </Button>
               </div>
-              <ModelSelector provider={p} token={token} onSaved={load} />
+              <ModelSelector provider={p} fetcher={fetcher} onSaved={load} />
             </div>
           ))}
         </CardContent>
@@ -1759,13 +1763,13 @@ const TIER_BUCKET_META: Record<number, { label: string; barCls: string }> = {
   3: { label: '👑 旗舰版（3次）', barCls: 'bg-amber-500' },
 };
 
-function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout: () => void }) {
+function AdminDashboard({ fetcher, onLogout }: { fetcher: AdminFetcher; onLogout: () => void }) {
   const [tab, setTab] = useState<'cards' | 'logs' | 'config' | 'feedback' | 'maintain'>('cards');
   const [stats, setStats] = useState<StatsData | null>(null);
 
   const loadStats = useCallback(async () => {
     try {
-      const res = await fetch('/api/admin/stats', { headers: withAuth(session.token) });
+      const res = await fetcher('/api/admin/stats');
       const data = await res.json();
       if (data.success) {
         setStats({
@@ -1782,7 +1786,7 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
     } catch {
       // 静默失败，看板显示 —
     }
-  }, [session.token]);
+  }, [fetcher]);
 
   useEffect(() => {
     loadStats();
@@ -1955,23 +1959,23 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
         })}
       </div>
 
-      {tab === 'cards' && <CardsPanel token={session.token} />}
-      {tab === 'logs' && <LogsPanel token={session.token} />}
-      {tab === 'config' && <ConfigPanel token={session.token} />}
-      {tab === 'feedback' && <FeedbackPanel token={session.token} />}
-      {tab === 'maintain' && <MaintenancePanel token={session.token} />}
+      {tab === 'cards' && <CardsPanel fetcher={fetcher} />}
+      {tab === 'logs' && <LogsPanel fetcher={fetcher} />}
+      {tab === 'config' && <ConfigPanel fetcher={fetcher} />}
+      {tab === 'feedback' && <FeedbackPanel fetcher={fetcher} />}
+      {tab === 'maintain' && <MaintenancePanel fetcher={fetcher} />}
     </div>
   );
 }
 
 // ========= 修改密码弹窗 =========
 function ChangePasswordDialog({
-  token,
+  fetcher,
   open,
   onOpenChange,
   onChanged,
 }: {
-  token: string;
+  fetcher: AdminFetcher;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onChanged: () => void;
@@ -2003,9 +2007,9 @@ function ChangePasswordDialog({
     }
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/password', {
+      const res = await fetcher('/api/admin/password', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...withAuth(token) },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ oldPassword: oldPwd, newPassword: newPwd }),
       });
       const data = await res.json();
@@ -2089,7 +2093,7 @@ const FEEDBACK_STATUS_META: Record<string, { label: string; cls: string }> = {
   closed: { label: '已关闭', cls: 'bg-slate-50 text-slate-500 border-slate-200' },
 };
 
-function FeedbackPanel({ token }: { token: string }) {
+function FeedbackPanel({ fetcher }: { fetcher: AdminFetcher }) {
   const [rows, setRows] = useState<FeedbackRow[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({ all: 0, pending: 0, replied: 0, closed: 0 });
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'replied' | 'closed'>('all');
@@ -2106,9 +2110,7 @@ function FeedbackPanel({ token }: { token: string }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/admin/feedback?status=${filterStatus}&page=${page}&pageSize=10`, {
-        headers: withAuth(token),
-      });
+      const res = await fetcher(`/api/admin/feedback?status=${filterStatus}&page=${page}&pageSize=10`);
       const data = await res.json();
       if (data.success) {
         setRows(data.rows as FeedbackRow[]);
@@ -2122,7 +2124,7 @@ function FeedbackPanel({ token }: { token: string }) {
     } finally {
       setLoading(false);
     }
-  }, [token, filterStatus, page]);
+  }, [fetcher, filterStatus, page]);
 
   useEffect(() => {
     load();
@@ -2136,9 +2138,9 @@ function FeedbackPanel({ token }: { token: string }) {
     }
     setReplySaving(true);
     try {
-      const res = await fetch('/api/admin/feedback', {
+      const res = await fetcher('/api/admin/feedback', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', ...withAuth(token) },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(close ? { id, status: 'closed' } : { id, adminReply: reply }),
       });
       const data = await res.json();
@@ -2339,7 +2341,7 @@ function FeedbackPanel({ token }: { token: string }) {
 //   - Railway 免费版没有 Volume，每次重新部署容器磁盘会重置；
 //     部署完后把之前下载的 .db 通过这里一键上传，所有卡密/配置/日志原样恢复。
 //   - 任何平台切换（Render → 阿里云 → 腾讯云）时，都能跨平台一键迁移完整数据库。
-function MaintenancePanel({ token }: { token: string }) {
+function MaintenancePanel({ fetcher }: { fetcher: AdminFetcher }) {
   const [downloading, setDownloading] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -2349,9 +2351,7 @@ function MaintenancePanel({ token }: { token: string }) {
   const handleDownload = async () => {
     setDownloading(true);
     try {
-      const res = await fetch('/api/admin/db/backup', {
-        headers: withAuth(token),
-      });
+      const res = await fetcher('/api/admin/db/backup');
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         toast.error(data.error || `备份失败 (HTTP ${res.status})`);
@@ -2401,9 +2401,8 @@ function MaintenancePanel({ token }: { token: string }) {
     try {
       const fd = new FormData();
       fd.append('db_file', pendingFile);
-      const res = await fetch('/api/admin/db/restore', {
+      const res = await fetcher('/api/admin/db/restore', {
         method: 'POST',
-        headers: withAuth(token),
         body: fd,
       });
       const data = await res.json().catch(() => ({}));
@@ -2540,17 +2539,56 @@ export default function AdminPage() {
   const [ready, setReady] = useState(false);
   const [pwdOpen, setPwdOpen] = useState(false);
 
+  // 统一的过期处理：清 localStorage、清 state、提示（每个面板都通过 adminFetch 间接触发）
+  const handleExpired = useCallback(() => {
+    localStorage.removeItem(ADMIN_SESSION_KEY);
+    setSession(null);
+    toast.error('登录已过期，请重新登录', { duration: 4000 });
+  }, []);
+
+  // 带鉴权的 fetch 包装：收到 401 时自动触发 handleExpired
+  const adminFetch = useCallback(
+    async (input: string, init?: RequestInit, silent401 = false) => {
+      const headers = { ...withAuth(session?.token || ''), ...(init?.headers || {}) };
+      const res = await fetch(input, { ...init, headers });
+      if (res.status === 401) {
+        if (!silent401) handleExpired();
+      }
+      return res;
+    },
+    [session?.token, handleExpired],
+  );
+
+  // 初始化：读 localStorage + 本地过期检查
   useEffect(() => {
     const stored = localStorage.getItem(ADMIN_SESSION_KEY);
     if (stored) {
       try {
-        setSession(JSON.parse(stored));
+        const parsed = JSON.parse(stored) as AdminSession;
+        // 本地过期检查：有 expiresAt 且已过期 → 清除
+        if (!parsed.token || !parsed.expiresAt || new Date(parsed.expiresAt) <= new Date()) {
+          localStorage.removeItem(ADMIN_SESSION_KEY);
+        } else {
+          setSession(parsed);
+        }
       } catch {
         localStorage.removeItem(ADMIN_SESSION_KEY);
       }
     }
     setReady(true);
   }, []);
+
+  // 自动退出定时器：token 即将过期时自动清除 session（设 1 分钟缓冲，避免刚过期就被打断）
+  useEffect(() => {
+    if (!session?.expiresAt) return;
+    const msLeft = new Date(session.expiresAt).getTime() - Date.now() - 60_000;
+    if (msLeft <= 0) {
+      handleExpired();
+      return;
+    }
+    const timer = setTimeout(() => handleExpired(), msLeft);
+    return () => clearTimeout(timer);
+  }, [session?.expiresAt, handleExpired]);
 
   const handleLogout = () => {
     localStorage.removeItem(ADMIN_SESSION_KEY);
@@ -2611,7 +2649,7 @@ export default function AdminPage() {
             <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
           </div>
         ) : session ? (
-          <AdminDashboard session={session} onLogout={handleLogout} />
+          <AdminDashboard fetcher={adminFetch} onLogout={handleLogout} />
         ) : (
           <AdminLogin onLogin={setSession} />
         )}
@@ -2626,7 +2664,7 @@ export default function AdminPage() {
 
       {session && (
         <ChangePasswordDialog
-          token={session.token}
+          fetcher={adminFetch}
           open={pwdOpen}
           onOpenChange={setPwdOpen}
           onChanged={() => {

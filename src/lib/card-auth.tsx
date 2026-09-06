@@ -104,6 +104,18 @@ export function CardAuthProvider({ children }: { children: ReactNode }) {
     toast.success('已退出登录');
   }, []);
 
+  // token 过期自动退出：定时检查 expiresAt，过期则清除 session（1 分钟缓冲）
+  useEffect(() => {
+    if (!session?.expiresAt) return;
+    const msLeft = new Date(session.expiresAt).getTime() - Date.now() - 60_000;
+    if (msLeft <= 0) {
+      logout();
+      return;
+    }
+    const timer = setTimeout(() => logout(), msLeft);
+    return () => clearTimeout(timer);
+  }, [session?.expiresAt, logout]);
+
   const refreshUsage = useCallback(async (): Promise<void> => {
     if (!session?.token) return;
     try {

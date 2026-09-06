@@ -54,9 +54,12 @@ export async function POST(request: NextRequest) {
   const usingDefaultPassword = bcrypt.compareSync(CONFIG.DEFAULT_ADMIN_PASSWORD, row!.password_hash);
 
   const token = signAdminToken({ adminId: row!.id, username: row!.username });
+  // 前端需要知道 token 过期时间，用于本地定时退出
+  const expiresAt = new Date(Date.now() + CONFIG.JWT_EXPIRES_HOURS * 3600_000).toISOString();
   return NextResponse.json({
     success: true,
     token,
+    expiresAt,
     admin: { id: row!.id, username: row!.username, role: row!.role },
     usingDefaultPassword,
   });
