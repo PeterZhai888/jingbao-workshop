@@ -35,7 +35,7 @@ export function validateRuntimeConfig(): void {
 export const CONFIG = {
   // JWT 密钥（生产必须从环境变量注入强随机字符串，否则拒绝启动）
   JWT_SECRET: process.env.JWT_SECRET || DEV_FALLBACK_JWT_SECRET,
-  JWT_EXPIRES_HOURS: 24,
+  JWT_EXPIRES_HOURS: Number(process.env.JWT_EXPIRES_HOURS) || 168,
 
   // SQLite 数据库路径（优先环境变量；默认用 /app/data 确保 Railway 容器可写）
   DB_PATH: process.env.DB_PATH || '/app/data/jingbao.db',

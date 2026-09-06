@@ -36,7 +36,7 @@ export interface AdminTokenPayload {
 
 export function signAdminToken(payload: Omit<AdminTokenPayload, 'sub'>): string {
   const full: AdminTokenPayload = { sub: 'admin', ...payload };
-  return jwt.sign(full, CONFIG.JWT_SECRET, { expiresIn: '12h' });
+  return jwt.sign(full, CONFIG.JWT_SECRET, { expiresIn: `${CONFIG.JWT_EXPIRES_HOURS}h` });
 }
 
 export function verifyAdminToken(token: string): AdminTokenPayload | null {

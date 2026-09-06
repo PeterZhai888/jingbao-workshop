@@ -170,7 +170,9 @@ export function TitlesTool() {
         </p>
       </div>
 
-      <Card className="border-border/60">
+      <div className="grid lg:grid-cols-5 gap-6">
+        {/* 输入区 */}
+        <Card className="lg:col-span-2 border-border/60 h-fit">
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <TrendingUp className="h-5 w-5 text-primary" />
@@ -270,7 +272,8 @@ export function TitlesTool() {
         </CardContent>
       </Card>
 
-      <Card className="border-border/60">
+        {/* 结果区 */}
+        <Card className="lg:col-span-3 border-border/60">
         <CardHeader className="flex-row items-center justify-between space-y-0 gap-4 flex-wrap">
           <div>
             <CardTitle className="text-lg flex items-center gap-2">
@@ -355,6 +358,7 @@ export function TitlesTool() {
           )}
         </CardContent>
       </Card>
+      </div>
 
       {/* 错误反馈弹窗（生成失败时从 toast 按钮唤起） */}
       <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} presetType="bug" presetContext={feedbackContext} />
