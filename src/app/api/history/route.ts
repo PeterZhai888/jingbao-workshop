@@ -15,7 +15,7 @@ export function GET(request: NextRequest) {
   // 映射为前端需要的结构：HistoryItem（StoryboardResult | TitleResult）
   const items = list.map((r) => {
     if (r.type === 'storyboard') {
-      const out = r.output as { title: string; shots: unknown[] };
+      const out = r.output as { title: string; shots: unknown[]; creationMode?: 'real' | 'ai' | 'hybrid' };
       return {
         id: r.id,
         type: 'storyboard' as const,
@@ -23,6 +23,7 @@ export function GET(request: NextRequest) {
         createdAt: r.createdAt,
         inputText: r.inputText,
         shots: out.shots || [],
+        ...(out.creationMode ? { creationMode: out.creationMode } : {}),
       };
     } else {
       const out = r.output as { titles: string[] };

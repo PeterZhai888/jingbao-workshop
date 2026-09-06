@@ -24,7 +24,7 @@ import { toast } from 'sonner';
 import { ModelSelector, type ModelSelection } from '@/components/model-selector';
 import { GeneratingProgress } from '@/components/generating-progress';
 import { FeedbackDialog, type FeedbackContext } from '@/components/feedback-dialog';
-import type { StoryboardShot, StoryboardResult } from '@/lib/types';
+import type { StoryboardShot, StoryboardResult, CreationMode } from '@/lib/types';
 import {
   Table,
   TableBody,
@@ -49,17 +49,30 @@ const MOCK_SHOTS: StoryboardShot[] = [
   { shotNumber: 5, sceneDescription: '咖啡杯特写，配字幕总结，画面渐暗', dialogue: '字幕：#生活方式 #手冲咖啡 #治愈系', duration: '3秒', cameraMove: '固定，淡出' },
 ];
 
+// 创作方式选项（默认 auto：AI 根据文案自动识别，普通用户无需理解概念差异）
+const CREATION_MODES: { value: CreationMode; label: string; desc: string }[] = [
+  { value: 'auto', label: '✨ 自动', desc: 'AI 自动识别文案类型' },
+  { value: 'real', label: '🧑 真人实拍', desc: '口播 / 知识分享 / Vlog，手机可拍' },
+  { value: 'ai', label: '🤖 AI视频', desc: '漫剧 / 小说推文 / 虚拟画面' },
+  { value: 'hybrid', label: '🔀 混合创作', desc: '真人口播 + AI画面 / B-roll' },
+];
+
+const MODE_NAME: Record<Exclude<CreationMode, 'auto'>, string> = {
+  real: '真人实拍', ai: 'AI视频', hybrid: '混合创作',
+};
+
 export function StoryboardTool() {
   const { session, refreshUsage, logout } = useCardAuth();
   const [inputText, setInputText] = useState('');
   const [extra, setExtra] = useState('');
   const [extraOpen, setExtraOpen] = useState(false);
   const [shotCount, setShotCount] = useState<number | 'auto'>('auto'); // 分镜数量：'auto' = AI 智能判断，或 3-15 整数
+  const [creationMode, setCreationMode] = useState<CreationMode>('auto'); // 创作方式：默认 AI 自动识别
   const [customMode, setCustomMode] = useState(false);
   const [customInput, setCustomInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<StoryboardShot[] | null>(null);
-  const [resultMeta, setResultMeta] = useState<{ id: string; title: string } | null>(null);
+  const [resultMeta, setResultMeta] = useState<{ id: string; title: string; creationMode?: Exclude<CreationMode, 'auto'> } | null>(null);
   const [copied, setCopied] = useState(false);
   const [model, setModel] = useState<ModelSelection>({ cost: 1 });
   // 错误反馈：生成失败时 toast 上带"反馈"按钮，自动附带失败上下文
@@ -114,7 +127,7 @@ export function StoryboardTool() {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${session?.token}`,
           },
-          body: JSON.stringify({ text: inputText, count: effectiveCount, provider: model.provider, model: model.model, extra: extra.trim() || undefined }),
+          body: JSON.stringify({ text: inputText, count: effectiveCount, provider: model.provider, model: model.model, extra: extra.trim() || undefined, mode: creationMode }),
         });
         const data = await res.json();
         if (!res.ok || !data.success) {
@@ -143,9 +156,13 @@ export function StoryboardTool() {
           return;
         }
         setResult(data.shots as StoryboardShot[]);
-        setResultMeta({ id: data.id, title: data.title || '分镜脚本' });
+        setResultMeta({ id: data.id, title: data.title || '分镜脚本', creationMode: data.creationMode });
         await refreshUsage();
-        toast.success('分镜脚本生成成功！');
+        // auto 模式下告知用户识别结果，让"AI 自动判断"可感知
+        const modeNote = data.autoDetected && data.creationMode
+          ? `已识别为「${MODE_NAME[data.creationMode as Exclude<CreationMode, 'auto'>]}」文案`
+          : undefined;
+        toast.success(modeNote ? `分镜生成成功（${modeNote}）` : '分镜脚本生成成功！');
       }
     } catch (e) {
       console.error(e);
@@ -162,7 +179,7 @@ export function StoryboardTool() {
     if (!result) return;
     const text = result.map(
       (s) =>
-        `【镜头${s.shotNumber}】时长：${s.duration} | 运镜：${s.cameraMove}\n画面：${s.sceneDescription}\n台词：${s.dialogue || '（无）'}`,
+        `【镜头${s.shotNumber}】${s.shotType === 'real' ? '[真人实拍] ' : s.shotType === 'ai' ? '[AI画面] ' : ''}时长：${s.duration} | 运镜：${s.cameraMove}\n画面：${s.sceneDescription}\n台词：${s.dialogue || '（无）'}`,
     ).join('\n\n');
     navigator.clipboard.writeText(text);
     setCopied(true);
@@ -178,6 +195,7 @@ export function StoryboardTool() {
       title: resultMeta.title,
       createdAt: new Date().toISOString(),
       inputText,
+      ...(resultMeta.creationMode ? { creationMode: resultMeta.creationMode } : {}),
       shots: result,
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -262,6 +280,33 @@ export function StoryboardTool() {
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* 创作方式选择：默认 AI 自动识别文案类型，专业用户可手动指定 */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">创作方式</label>
+                <span className="text-xs text-primary font-medium truncate ml-2">
+                  {CREATION_MODES.find((m) => m.value === creationMode)?.desc}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {CREATION_MODES.map((m) => (
+                  <button
+                    key={m.value}
+                    type="button"
+                    onClick={() => setCreationMode(m.value)}
+                    title={m.desc}
+                    className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                      creationMode === m.value
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'border border-border text-muted-foreground hover:border-primary/40 hover:text-primary'
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* 分镜数量选择：自动（AI 智能判断）+ 快捷档位 + 自定义 */}
@@ -456,6 +501,18 @@ export function StoryboardTool() {
                         <Badge variant="secondary" className="bg-primary text-primary-foreground border-primary/20">
                           镜头 {String(shot.shotNumber).padStart(2, '0')}
                         </Badge>
+                        {shot.shotType && (
+                          <Badge
+                            variant="outline"
+                            className={
+                              shot.shotType === 'real'
+                                ? 'text-emerald-700 border-emerald-200 bg-emerald-50/60'
+                                : 'text-violet-700 border-violet-200 bg-violet-50/60'
+                            }
+                          >
+                            {shot.shotType === 'real' ? '🧑 真人实拍' : '🤖 AI画面'}
+                          </Badge>
+                        )}
                         <Badge variant="outline" className="gap-1 whitespace-normal shrink">
                           <Clock className="h-3 w-3 shrink-0" /> {shot.duration}
                         </Badge>
@@ -485,7 +542,14 @@ export function StoryboardTool() {
                     {result.map((shot) => (
                       <div key={shot.shotNumber} className="rounded-xl border border-border/60 bg-muted/20 p-3.5 space-y-2">
                         <div className="flex items-center justify-between">
-                          <span className="font-mono font-bold text-primary">镜头 {shot.shotNumber}</span>
+                          <span className="font-mono font-bold text-primary">
+                            镜头 {shot.shotNumber}
+                            {shot.shotType && (
+                              <span className={`ml-1.5 font-sans text-xs rounded-full px-2 py-0.5 ${shot.shotType === 'real' ? 'bg-emerald-100 text-emerald-700' : 'bg-violet-100 text-violet-700'}`}>
+                                {shot.shotType === 'real' ? '真人' : 'AI'}
+                              </span>
+                            )}
+                          </span>
                           <span className="text-xs rounded-full bg-primary/10 text-primary px-2 py-0.5">{shot.duration}</span>
                         </div>
                         <p className="text-sm leading-relaxed">{shot.sceneDescription}</p>
@@ -502,6 +566,7 @@ export function StoryboardTool() {
                       <TableHeader>
                         <TableRow>
                           <TableHead className="w-16">镜头</TableHead>
+                          {result.some((s) => s.shotType) && <TableHead className="w-24">类型</TableHead>}
                           <TableHead>画面描述</TableHead>
                           <TableHead>台词/旁白</TableHead>
                           <TableHead className="w-20">时长</TableHead>
@@ -512,6 +577,17 @@ export function StoryboardTool() {
                         {result.map((shot) => (
                           <TableRow key={shot.shotNumber}>
                             <TableCell className="font-mono font-bold text-primary">{shot.shotNumber}</TableCell>
+                            {result.some((s) => s.shotType) && (
+                              <TableCell className="whitespace-nowrap">
+                                {shot.shotType ? (
+                                  <span className={`text-xs rounded-full px-2 py-0.5 ${shot.shotType === 'real' ? 'bg-emerald-100 text-emerald-700' : 'bg-violet-100 text-violet-700'}`}>
+                                    {shot.shotType === 'real' ? '真人实拍' : 'AI画面'}
+                                  </span>
+                                ) : (
+                                  '—'
+                                )}
+                              </TableCell>
+                            )}
                             <TableCell className="text-sm leading-relaxed max-w-sm">{shot.sceneDescription}</TableCell>
                             <TableCell className="text-sm max-w-xs text-muted-foreground">{shot.dialogue || '—'}</TableCell>
                             <TableCell className="whitespace-nowrap text-sm">{shot.duration}</TableCell>

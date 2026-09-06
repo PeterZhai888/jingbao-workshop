@@ -145,11 +145,13 @@ export default function HistoryPage() {
   };
 
   // ===== 复制 =====
+  const shotTypeLabel = (s: StoryboardResult['shots'][number]) =>
+    s.shotType === 'real' ? '[真人实拍] ' : s.shotType === 'ai' ? '[AI画面] ' : '';
   const storyboardToText = (item: StoryboardResult) =>
     item.shots
       .map(
         (s) =>
-          `【镜头${s.shotNumber}】时长：${s.duration} | 运镜：${s.cameraMove}\n画面：${s.sceneDescription}\n台词：${s.dialogue || '（无）'}`,
+          `【镜头${s.shotNumber}】${shotTypeLabel(s)}时长：${s.duration} | 运镜：${s.cameraMove}\n画面：${s.sceneDescription}\n台词：${s.dialogue || '（无）'}`,
       )
       .join('\n\n');
 
@@ -167,7 +169,7 @@ export default function HistoryPage() {
 
   const handleCopyShot = (item: StoryboardResult, idx: number) => {
     const s = item.shots[idx];
-    const text = `【镜头${s.shotNumber}】时长：${s.duration} | 运镜：${s.cameraMove}\n画面：${s.sceneDescription}\n台词：${s.dialogue || '（无）'}`;
+    const text = `【镜头${s.shotNumber}】${shotTypeLabel(s)}时长：${s.duration} | 运镜：${s.cameraMove}\n画面：${s.sceneDescription}\n台词：${s.dialogue || '（无）'}`;
     navigator.clipboard.writeText(text);
     setCopiedShot(idx);
     setTimeout(() => setCopiedShot(null), 1500);

@@ -21,12 +21,23 @@ export interface AuthSession {
   exhaustedTip?: string;
 }
 
+/**
+ * 分镜创作方式：
+ * - 'auto'   AI 自动识别文案类型（默认）
+ * - 'real'   真人实拍（口播/知识分享/Vlog/探店/访谈）
+ * - 'ai'     AI视频（漫剧/小说推文/虚拟画面/无真人出镜）
+ * - 'hybrid' 混合创作（真人口播 + AI画面/B-roll）
+ */
+export type CreationMode = 'auto' | 'real' | 'ai' | 'hybrid';
+
 export interface StoryboardShot {
   shotNumber: number;
   sceneDescription: string;
   dialogue: string;
   duration: string;
   cameraMove: string;
+  /** 混合创作模式下标注镜头类型：real = 真人实拍，ai = AI生成画面/B-roll */
+  shotType?: 'real' | 'ai';
 }
 
 export interface StoryboardResult {
@@ -35,6 +46,8 @@ export interface StoryboardResult {
   title: string;
   createdAt: string;
   inputText: string;
+  /** 实际使用的创作方式（旧历史记录可能没有该字段） */
+  creationMode?: Exclude<CreationMode, 'auto'>;
   shots: StoryboardShot[];
 }
 
