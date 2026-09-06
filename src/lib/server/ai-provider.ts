@@ -361,6 +361,8 @@ export interface CallAIResult {
   content: string;
   provider: string;     // 实际使用的提供商名
   error?: string;       // 内部诊断用（日志），不直接透给用户
+  /** OpenAI 兼容的 finish_reason：'stop' 正常 / 'length' 表示输出被 max_tokens 截断 */
+  finishReason?: string;
 }
 
 /**
@@ -415,11 +417,12 @@ export async function callAI(options: CallAIOptions): Promise<CallAIResult> {
 
       if (res.ok) {
         const data = (await res.json()) as {
-          choices?: Array<{ message?: { content?: string } }>;
+          choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
         };
         const content = data.choices?.[0]?.message?.content || '';
+        const finishReason = data.choices?.[0]?.finish_reason || '';
         if (content) {
-          return { ok: true, content, provider: provider.label };
+          return { ok: true, content, provider: provider.label, finishReason };
         }
         return { ok: false, content: '', provider: provider.label, error: 'EMPTY_RESPONSE' };
       }
@@ -451,55 +454,64 @@ function stripThinkBlocks(raw: string): string {
 }
 
 /**
- * 在字符串中定位最后一个完整平衡的 JSON 值（[] 或 {}）。
- * 思路：答案永远在思考/示例之后——从文本末尾的最后一个闭括号（] 或 }）反向配对，
- * 找到与之平衡的开括号，切出完整 JSON。注意必须从闭括号入手（而不是找最靠后的开括号）：
- * 对象数组 [{"a":1},{"b":2}] 中最后的 { 比数组的 [ 更靠后，从开括号入手会把整个数组
- * 截成最后一个元素对象；从闭括号反向配对则天然取到完整数组。
- * 返回 { start, end } 切片下标（含两端），找不到返回 null。
+ * 判断 text 中下标 i 处的引号是否被反斜杠转义（左边连续反斜杠为奇数个 = 被转义）。
+ * 正反向扫描通用：JSON 的字符串转义规则与扫描方向无关。
  */
-function findLastBalancedJSON(text: string): { start: number; end: number } | null {
-  // 反向扫描时的转义判定：引号是否被转义，取决于它左边连续反斜杠的数量（奇数=被转义）。
-  // 不能用正向扫描的 escape 标记法——反向扫描先遇到 " 再遇到 \，标记位顺序是反的。
-  const isEscapedQuote = (i: number): boolean => {
-    let backslashes = 0;
-    for (let j = i - 1; j >= 0 && text[j] === '\\'; j--) backslashes++;
-    return backslashes % 2 === 1;
-  };
+function isEscapedQuote(text: string, i: number): boolean {
+  let backslashes = 0;
+  for (let j = i - 1; j >= 0 && text[j] === '\\'; j--) backslashes++;
+  return backslashes % 2 === 1;
+}
 
-  // 找最末尾的闭括号 ] 或 }（跳过字符串字面量内的括号：从末尾反向扫，维护 inStr）
-  let closeIdx = -1;
+/**
+ * 从文本末尾向前收集所有"以闭括号收尾的完整平衡 JSON 块"候选，按从后往前的顺序返回。
+ * 设计要点：
+ * 1. 必须从闭括号入手配对（而不是找最靠前的开括号）：对象数组 [{"a":1},{"b":2}]
+ *    中最后的 { 比数组的 [ 更靠后，从开括号入手会把整个数组截成最后一个元素对象。
+ * 2. 返回"所有"候选而非仅最右一个：模型可能在真实数组之后追加 [完]、[END]、[结束]
+ *    等干扰块，最右块是干扰块时，继续尝试左侧候选即可拿到真实答案。
+ * 3. 每个闭括号反向配对时跳过字符串字面量内的括号，避免误配。
+ */
+function findBalancedJSONCandidates(text: string): Array<{ start: number; end: number }> {
+  // 收集所有"非字符串内"的闭括号位置
+  const closes: number[] = [];
   let inStr = false;
-  for (let i = text.length - 1; i >= 0; i--) {
+  for (let i = 0; i < text.length; i++) {
     const ch = text[i];
     if (ch === '"') {
-      if (!isEscapedQuote(i)) inStr = !inStr;
+      if (!isEscapedQuote(text, i)) inStr = !inStr;
       continue;
     }
     if (inStr) continue;
-    if (ch === ']' || ch === '}') { closeIdx = i; break; }
+    if (ch === ']' || ch === '}') closes.push(i);
   }
-  if (closeIdx < 0) return null;
-  const closeCh = text[closeIdx];
-  const openCh = closeCh === ']' ? '[' : '{';
 
-  // 从 closeIdx 反向做括号配对，找到与之平衡的开括号
-  let depth = 0;
-  inStr = false;
-  for (let i = closeIdx; i >= 0; i--) {
-    const ch = text[i];
-    if (ch === '"') {
-      if (!isEscapedQuote(i)) inStr = !inStr;
-      continue;
-    }
-    if (inStr) continue;
-    if (ch === closeCh) depth++;
-    else if (ch === openCh) {
-      depth--;
-      if (depth === 0) return { start: i, end: closeIdx };
+  // 从最右的闭括号开始反向配对，收集平衡块
+  const candidates: Array<{ start: number; end: number }> = [];
+  for (let ci = closes.length - 1; ci >= 0; ci--) {
+    const closeIdx = closes[ci];
+    const closeCh = text[closeIdx];
+    const openCh = closeCh === ']' ? '[' : '{';
+    let depth = 0;
+    inStr = false;
+    for (let i = closeIdx; i >= 0; i--) {
+      const ch = text[i];
+      if (ch === '"') {
+        if (!isEscapedQuote(text, i)) inStr = !inStr;
+        continue;
+      }
+      if (inStr) continue;
+      if (ch === closeCh) depth++;
+      else if (ch === openCh) {
+        depth--;
+        if (depth === 0) {
+          candidates.push({ start: i, end: closeIdx });
+          break;
+        }
+      }
     }
   }
-  return null;
+  return candidates;
 }
 
 /**
@@ -531,7 +543,11 @@ function normalizeFullwidth(text: string): string {
 
 /**
  * 修复 LLM 生成 JSON 的常见瑕疵：
- *  - 全角/智能引号 → ASCII 双引号
+ *  - 全角/智能引号 → ASCII 双引号（覆盖"全角引号作数组分隔符"的场景）
+ *  - 未转义 ASCII 引号 → 全角引号：模型在中文标题/文案里强调词语时经常漏写 \"
+ *    （如 ["别再"傻干"了！…"]），导致字符串被提前闭合。中文语境修复规则：
+ *    引号两侧是汉字/中文标点时视为强调引号。真正的数组分隔引号两侧是 [ , ] 空白，
+ *    不受影响；已转义的 \" 左侧是反斜杠，同样不受影响。
  *  - 行注释 // ... 和块注释 /* ... *\/ 去掉
  *  - 尾逗号 ,}、,] 去掉
  * 返回修复后的字符串（可能仍不合法，调用方自行再试 JSON.parse）。
@@ -540,13 +556,78 @@ function repairJSON(raw: string): string {
   return raw
     .replace(/[\u201c\u201d]/g, '"') // " " → "
     .replace(/[\u2018\u2019]/g, '"') // ' ' → "
+    // 中文语境未转义引号 → 全角（顺序在"全角→ASCII"之后：刚转成 ASCII 的全角强调引号
+    // 夹在汉字之间会破坏字符串，此步将其还原为全角；真正的数组分隔引号两侧是 [ , ] 空白，
+    // 不匹配；已转义的 \" 左侧是反斜杠，也不匹配）
+    .replace(/([\u4e00-\u9fff\uff00-\uff65\u3001-\u303f])"([\u4e00-\u9fff])/g, '$1\u201c$2')
+    // 右侧扩展中文/ASCII 标点（:;!?…—、。等）：覆盖 "干货"： 这类"汉字+引号+标点"的强调引号。
+    // 注意右侧绝不能包含 , ] } 空白——那是字符串真正的结尾分隔符，会被误伤。
+    .replace(/([\u4e00-\u9fff])"([\u4e00-\u9fff\uff00-\uff65\u3001-\u303f:;!?…—、。，])/g, '$1\u201d$2')
     .replace(/\/\/[^\n]*/g, '') // 行注释
     .replace(/\/\*[\s\S]*?\*\//g, '') // 块注释
     .replace(/,\s*([\]}])/g, '$1'); // 尾逗号
 }
 
+/**
+ * 容错提取字符串数组（仅用于纯字符串数组，如标题列表）。
+ * 当响应被 max_tokens 截断（数组没有闭合 ]）或数组内混入少量脏字符时，
+ * 逐个扫描元素，只接受"以引号开头、引号闭合、后跟 , 或 ]"的规整元素。
+ * 遇到未闭合字符串（截断位置）或非法分隔符（脏数据）即停止/放弃，
+ * 绝不从散文或思考文本里捡碎片。
+ * 返回 null 表示内容不适合该提取方式。
+ */
+function extractPartialStringArray(text: string): string[] | null {
+  const result: string[] = [];
+  const start = text.indexOf('[');
+  if (start < 0) return null;
+  let i = start + 1;
+  let sawElement = false;
+
+  const isSpace = (ch: string) => /\s/.test(ch);
+  const skipSpace = () => { while (i < text.length && isSpace(text[i])) i++; };
+
+  while (i < text.length) {
+    skipSpace();
+    if (i >= text.length) break;
+    const open = text[i];
+    if (open === ']') return sawElement ? result : null;
+    if (open !== '"' && open !== '\u201c') return null; // 元素必须以引号开头
+    const close = open === '"' ? '"' : '\u201d';
+    i++;
+
+    // 读取字符串内容（处理反斜杠转义）
+    let s = '';
+    let closed = false;
+    while (i < text.length) {
+      const ch = text[i];
+      if (ch === '\\') {
+        if (i + 1 < text.length) { s += text[i + 1]; i += 2; } else { i++; }
+        continue;
+      }
+      if (ch === close) { closed = true; i++; break; }
+      s += ch;
+      i++;
+    }
+    if (!closed) break; // 未闭合：截断位置，丢弃残缺元素
+
+    sawElement = true;
+    result.push(s);
+    skipSpace();
+    if (i >= text.length) break; // 截断在元素后：保留已收集的完整元素
+    if (text[i] === ',') { i++; continue; }
+    if (text[i] === ']') return result;
+    return null; // 脏分隔符：放弃整个结果，避免碎片
+  }
+  return result.length > 0 ? result : null;
+}
+
+export interface ExtractJSONOptions {
+  /** 启用容错字符串数组提取（仅当内容是字符串数组场景时传，如标题列表） */
+  partialArrays?: boolean;
+}
+
 /** 从 LLM 输出文本中稳健提取 JSON 数组/对象。 */
-export function extractJSON<T>(raw: string): T | null {
+export function extractJSON<T>(raw: string, opts?: ExtractJSONOptions): T | null {
   if (!raw) return null;
 
   // 第 1 步：剥掉 <think> 思考块 + 全角标点规范化
@@ -565,12 +646,11 @@ export function extractJSON<T>(raw: string): T | null {
     if (r !== null) return r;
   }
 
-  // 第 3 步：最右平衡 JSON 块——兜底方案，从末尾反向找最后一个完整平衡的 JSON
-  // （答案在思考之后，反向找能避开思考里的示例数组污染）
-  const balanced = findLastBalancedJSON(cleaned);
-  if (balanced) {
-    const slice = cleaned.slice(balanced.start, balanced.end + 1);
-    const r = tryParse(slice);
+  // 第 3 步：平衡 JSON 块候选（从最右到最左逐个尝试）
+  // 从闭括号反向配对取完整数组；模型在真实数组后追加 [完]/[END] 等干扰块时，
+  // 最右候选解析失败会自动尝试左侧候选，取到真实答案。
+  for (const { start, end } of findBalancedJSONCandidates(cleaned)) {
+    const r = tryParse(cleaned.slice(start, end + 1));
     if (r !== null) return r;
   }
 
@@ -578,9 +658,15 @@ export function extractJSON<T>(raw: string): T | null {
   const start = Math.min(...[cleaned.indexOf('['), cleaned.indexOf('{')].filter((i) => i >= 0));
   const end = Math.max(cleaned.lastIndexOf(']'), cleaned.lastIndexOf('}'));
   if (Number.isFinite(start) && end > start) {
-    const slice = cleaned.slice(start, end + 1);
-    const r = tryParse(slice);
+    const r = tryParse(cleaned.slice(start, end + 1));
     if (r !== null) return r;
+  }
+
+  // 第 5 步：容错字符串数组提取（仅显式开启时）——应对响应截断/脏数组。
+  // 提取前先跑 repairJSON：截断+未转义引号叠加时，修复引号后能取回完整的前缀元素
+  if (opts?.partialArrays) {
+    const partial = extractPartialStringArray(repairJSON(cleaned));
+    if (partial !== null) return partial as unknown as T;
   }
 
   return null;

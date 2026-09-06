@@ -163,13 +163,16 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const parsed = extractJSON<unknown[]>(ai.content);
+  // 解析 LLM 输出：启用容错提取，响应被截断时也能取回完整的前缀标题
+  const parsed = extractJSON<unknown[]>(ai.content, { partialArrays: true });
   // 校验：数组、元素全为字符串、至少 3 条
   const titles = Array.isArray(parsed)
     ? parsed.map((t) => (typeof t === 'string' ? t : String(t))).map((s) => s.trim()).filter(Boolean)
     : [];
-  const contentPreview = ai.content.slice(0, 200).replace(/\s+/g, ' ');
   if (titles.length < 3) {
+    // 失败诊断：记录内容长度、截断标志（finish_reason=length）与首 200 字符
+    const contentPreview = ai.content.slice(0, 200).replace(/\s+/g, ' ');
+    const truncFlag = ai.finishReason === 'length' ? ' TRUNCATED_BY_MAX_TOKENS' : '';
     writeUsageLog({
       cardId: cardId!,
       cardCode: cardCode!,
@@ -178,7 +181,7 @@ export async function POST(request: NextRequest) {
       ip,
       userAgent,
       fingerprint,
-      detail: `AI_PARSE_FAIL (${ai.provider}) len=${titles.length} preview="${contentPreview}"`,
+      detail: `AI_PARSE_FAIL (${ai.provider}) len=${titles.length} contentLen=${ai.content.length} finish=${ai.finishReason ?? '-'}${truncFlag} preview="${contentPreview}"`,
     });
     return NextResponse.json(
       {
