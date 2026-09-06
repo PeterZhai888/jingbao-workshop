@@ -12,11 +12,18 @@ import type { ProviderKey } from '@/lib/server/ai-provider';
 import { checkGlobalGuard } from '@/lib/server/service-guard';
 import type { StoryboardShot } from '@/lib/types';
 
-// 分镜生成的系统 Prompt：要求输出严格 JSON（镜头数量由用户指定）
-function buildSystemPrompt(count: number, extra?: string): string {
+// 分镜生成的系统 Prompt：要求输出严格 JSON（镜头数量由用户指定，'auto' 时由 AI 自行判断）
+function buildSystemPrompt(count: number | 'auto', extra?: string): string {
+  const countRule = count === 'auto'
+    ? `1. 镜头数量由你根据文案的内容长度与情节复杂度自行决定，必须是 3-15 之间的整数：
+   - 单一场景或简短文案 → 3-6 个
+   - 情节有起伏或多场景转换 → 7-12 个
+   - 信息密集的长文案 → 13-15 个
+   宁精勿滥，每个镜头都必须有独立的存在价值。`
+    : `1. 输出恰好 ${count} 个镜头，不多不少。`;
   const base = `你是专业的短视频分镜编剧。根据用户的视频文案，输出一份分镜脚本。
 要求：
-1. 输出恰好 ${count} 个镜头，不多不少。
+${countRule}
 2. 严格只输出 JSON 数组，不要任何解释文字、不要 markdown 代码块之外的说明。
 3. 每个镜头包含以下字段：
    - shotNumber: 镜头序号（从 1 开始的整数）
@@ -68,7 +75,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  let body: { text?: string; count?: number; provider?: string; model?: string; extra?: string } = {};
+  let body: { text?: string; count?: number | 'auto'; provider?: string; model?: string; extra?: string } = {};
   try {
     body = await request.json();
   } catch {
@@ -80,9 +87,15 @@ export async function POST(request: NextRequest) {
   // 用户补充要求（可选）：拼入 System Prompt 作为额外指令层，与文案内容隔离
   const extra = (body.extra || '').trim().slice(0, 100);
 
-  // 分镜数量：3-15 任意整数，默认 10
-  const parsedCount = parseInt(String(body.count ?? 10), 10);
-  const count = Number.isFinite(parsedCount) ? Math.min(Math.max(parsedCount, 3), 15) : 10;
+  // 分镜数量：'auto' = AI 自动判断；数字则 clamp 到 3-15（未传默认 10，兼容旧前端）
+  const rawCount = body.count;
+  let count: number | 'auto';
+  if (rawCount === 'auto') {
+    count = 'auto';
+  } else {
+    const n = parseInt(String(rawCount ?? 10), 10);
+    count = Number.isFinite(n) ? Math.min(Math.max(n, 3), 15) : 10;
+  }
 
   // 敏感词过滤
   const sens = checkSensitive(text);

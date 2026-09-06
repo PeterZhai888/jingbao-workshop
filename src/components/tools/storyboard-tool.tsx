@@ -54,7 +54,7 @@ export function StoryboardTool() {
   const [inputText, setInputText] = useState('');
   const [extra, setExtra] = useState('');
   const [extraOpen, setExtraOpen] = useState(false);
-  const [shotCount, setShotCount] = useState(10); // 分镜数量 3-15，默认 10
+  const [shotCount, setShotCount] = useState<number | 'auto'>('auto'); // 分镜数量：'auto' = AI 智能判断，或 3-15 整数
   const [customMode, setCustomMode] = useState(false);
   const [customInput, setCustomInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -76,7 +76,7 @@ export function StoryboardTool() {
   const customValid = Number.isFinite(customParsed) && customParsed >= 3 && customParsed <= 15;
   const effectiveCount = customMode ? (customValid ? customParsed : shotCount) : shotCount;
 
-  const applyPreset = (n: number) => {
+  const applyPreset = (n: number | 'auto') => {
     setShotCount(n);
     setCustomMode(false);
   };
@@ -264,13 +264,26 @@ export function StoryboardTool() {
               )}
             </div>
 
-            {/* 分镜数量选择：快捷档位 + 自定义 */}
+            {/* 分镜数量选择：自动（AI 智能判断）+ 快捷档位 + 自定义 */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-medium">分镜数量</label>
-                <span className="text-xs text-primary font-medium">将生成 {effectiveCount} 条</span>
+                <span className="text-xs text-primary font-medium">
+                  {shotCount === 'auto' ? 'AI 将根据内容智能判断条数' : `将生成 ${effectiveCount} 条`}
+                </span>
               </div>
               <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => applyPreset('auto')}
+                  className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                    !customMode && shotCount === 'auto'
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'border border-border text-muted-foreground hover:border-primary/40 hover:text-primary'
+                  }`}
+                >
+                  自动
+                </button>
                 {[3, 5, 10, 15].map((n) => (
                   <button
                     key={n}
