@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateCard } from '@/lib/server/auth';
+import { authenticateCard, withRenewHeader } from '@/lib/server/auth';
 import { db } from '@/lib/server/db';
 import { writeUsageLog } from '@/lib/server/card-service';
 
@@ -72,5 +72,5 @@ export async function POST(request: NextRequest) {
     detail: { type },
   });
 
-  return NextResponse.json({ success: true });
+  return withRenewHeader(NextResponse.json({ success: true }), auth);
 }

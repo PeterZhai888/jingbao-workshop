@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateAdmin } from '@/lib/server/auth';
+import { authenticateAdmin, withRenewHeader } from '@/lib/server/auth';
 import { renewCardExpiry, writeUsageLog, getCardById } from '@/lib/server/card-service';
 import { getClientIP } from '@/lib/server/card-utils';
 
@@ -45,5 +45,5 @@ export async function POST(request: NextRequest) {
     ip,
     detail: { by: auth.username, addDays, newExpiry: updated?.expires_at },
   });
-  return NextResponse.json({ success: true, expiresAt: updated?.expires_at || null });
+  return withRenewHeader(NextResponse.json({ success: true, expiresAt: updated?.expires_at || null }), auth);
 }

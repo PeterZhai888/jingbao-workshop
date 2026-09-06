@@ -1,6 +1,6 @@
 // 通用鉴权与安全中间件（用于 Next.js Route Handler 前）
-import { NextRequest } from 'next/server';
-import { verifyToken, verifyAdminToken } from '@/lib/server/jwt';
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyToken, verifyAdminToken, maybeRenewCardToken, maybeRenewAdminToken } from '@/lib/server/jwt';
 import {
   getCardById,
   isCardUsable,
@@ -23,6 +23,20 @@ export interface CardAuthResult {
   ip?: string;
   fingerprint?: string;
   userAgent?: string;
+  /** 续期产生的新 token（仅 ok=true 时可能存在） */
+  renewedToken?: string;
+  /** 新 token 对应的过期时间（ISO 字符串） */
+  renewedExpiresAt?: string;
+}
+
+export interface AdminAuthResult {
+  ok: boolean;
+  status?: number;
+  error?: string;
+  adminId?: number;
+  username?: string;
+  renewedToken?: string;
+  renewedExpiresAt?: string;
 }
 
 /**
@@ -82,6 +96,7 @@ export function authenticateCard(request: NextRequest): CardAuthResult {
   }
 
   const dailyUsed = getDailyUsed(card.id);
+  const renew = maybeRenewCardToken(payload);
   return {
     ok: true,
     cardId: card.id,
@@ -91,21 +106,49 @@ export function authenticateCard(request: NextRequest): CardAuthResult {
     ip,
     fingerprint: fp,
     userAgent,
+    renewedToken: renew.token,
+    renewedExpiresAt: renew.expiresAt,
   };
 }
 
 // 管理员鉴权
-export function authenticateAdmin(request: NextRequest) {
+export function authenticateAdmin(request: NextRequest): AdminAuthResult {
   const auth = request.headers.get('authorization');
   if (!auth || !auth.startsWith('Bearer ')) {
-    return { ok: false, status: 401, error: '未登录' } as const;
+    return { ok: false, status: 401, error: '未登录' };
   }
   const token = auth.slice(7);
   const payload = verifyAdminToken(token);
   if (!payload || payload.sub !== 'admin') {
-    return { ok: false, status: 401, error: '登录已失效' } as const;
+    return { ok: false, status: 401, error: '登录已失效' };
   }
-  return { ok: true as const, adminId: payload.adminId, username: payload.username };
+  const renew = maybeRenewAdminToken(payload);
+  return {
+    ok: true,
+    adminId: payload.adminId,
+    username: payload.username,
+    renewedToken: renew.token,
+    renewedExpiresAt: renew.expiresAt,
+  };
+}
+
+/**
+ * 给响应注入续期头。调用方式：
+ *   const auth = authenticateCard(req);
+ *   if (!auth.ok) return NextResponse.json(...);
+ *   return withRenewHeader(NextResponse.json({ success: true }), auth);
+ */
+export function withRenewHeader<T extends NextResponse>(
+  response: T,
+  auth: { renewedToken?: string; renewedExpiresAt?: string } | undefined,
+): T {
+  if (auth?.renewedToken) {
+    response.headers.set('X-Renewed-Token', auth.renewedToken);
+  }
+  if (auth?.renewedExpiresAt) {
+    response.headers.set('X-Renewed-Expires-At', auth.renewedExpiresAt);
+  }
+  return response;
 }
 
 // 简单敏感词过滤（黑名单可后续扩展到 system_config 表维护）

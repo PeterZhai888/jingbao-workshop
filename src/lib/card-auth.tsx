@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode, useCallback, useRef } from 'react';
 import type { AuthSession } from '@/lib/types';
 import { toast } from 'sonner';
 
@@ -16,6 +16,29 @@ const CardAuthContext = createContext<CardAuthContextType | undefined>(undefined
 
 const STORAGE_KEY = 'ai_video_tool_session';
 const FINGERPRINT_KEY = 'ai_video_tool_fp';
+
+/**
+ * 从 response 中提取续期头，若有则更新 session（localStorage + state）。
+ * 自动重置 token 过期定时器（因为 expiresAt 变了，useEffect 依赖会触发）。
+ */
+function applyRenewHeaders(
+  response: Response,
+  getSession: () => AuthSession | null,
+  setSession: (s: AuthSession | null) => void,
+): void {
+  const newToken = response.headers.get('X-Renewed-Token');
+  const newExpiresAt = response.headers.get('X-Renewed-Expires-At');
+  if (!newToken || !newExpiresAt) return;
+
+  const current = getSession();
+  if (!current) return;
+
+  const updated: AuthSession = { ...current, token: newToken, expiresAt: newExpiresAt };
+  setSession(updated);
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+  } catch { /* ignore */ }
+}
 
 // 简单指纹生成（IP需要后端配合，这里只用UA+随机数）
 function getFingerprint(): string {
@@ -33,6 +56,24 @@ function getFingerprint(): string {
 export function CardAuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // 用 ref 保存最新 session，供全局 fetch 拦截器使用（避免闭包陈旧）
+  const sessionRef = useRef<AuthSession | null>(null);
+  useEffect(() => { sessionRef.current = session; }, [session]);
+
+  // 全局 fetch 拦截器：任何同源 API 返回续期头时自动更新 session
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = async (...args: Parameters<typeof fetch>): Promise<Response> => {
+      const response = await originalFetch(...args);
+      try {
+        applyRenewHeaders(response, () => sessionRef.current, setSession);
+      } catch { /* ignore */ }
+      return response;
+    };
+    return () => { window.fetch = originalFetch; };
+  }, []);
 
   // 初始化：从 localStorage 读取，并向服务端校验 token 是否仍有效
   // （防止本地残留失效 session：不仅会导致生成报错，还会把首页激活表单藏起来，用户无法重新激活）

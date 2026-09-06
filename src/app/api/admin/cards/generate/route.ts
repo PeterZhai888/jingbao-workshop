@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateAdmin } from '@/lib/server/auth';
+import { authenticateAdmin, withRenewHeader } from '@/lib/server/auth';
 import { batchGenerateCardCodes } from '@/lib/server/card-utils';
 import { batchInsertCards, writeUsageLog } from '@/lib/server/card-service';
 import { getClientIP } from '@/lib/server/card-utils';
@@ -42,10 +42,13 @@ export async function POST(request: NextRequest) {
     detail: { by: auth.username, requested: count, inserted, validDays, dailyLimit, remark },
   });
 
-  return NextResponse.json({
-    success: true,
-    requested: count,
-    inserted,
-    cards: actualCodes,
-  });
+  return withRenewHeader(
+    NextResponse.json({
+      success: true,
+      requested: count,
+      inserted,
+      cards: actualCodes,
+    }),
+    auth,
+  );
 }

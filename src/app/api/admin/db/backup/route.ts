@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateAdmin } from '@/lib/server/auth';
+import { authenticateAdmin, withRenewHeader } from '@/lib/server/auth';
 import fs from 'node:fs';
 import path from 'node:path';
 import { closeAndResetDatabase, db, getDatabaseFilePath, initializeDatabase } from '@/lib/server/db';
@@ -37,15 +37,18 @@ export async function GET(request: NextRequest) {
     const filename = `jingbao-workshop_${stamp}.db`;
 
     // 2) 以附件形式下载（避免浏览器尝试打开显示）
-    return new NextResponse(buf, {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/vnd.sqlite3',
-        'Content-Disposition': `attachment; filename="${filename}"`,
-        'Content-Length': String(buf.byteLength),
-        'Cache-Control': 'private, no-store',
-      },
-    });
+    return withRenewHeader(
+      new NextResponse(buf, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/vnd.sqlite3',
+          'Content-Disposition': `attachment; filename="${filename}"`,
+          'Content-Length': String(buf.byteLength),
+          'Cache-Control': 'private, no-store',
+        },
+      }),
+      auth,
+    );
   } finally {
     // 3) 无论下载成功/失败，都重新打开数据库，恢复 API 正常服务
     initializeDatabase({ quiet: true });

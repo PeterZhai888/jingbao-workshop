@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { authenticateAdmin } from '@/lib/server/auth';
+import { authenticateAdmin, withRenewHeader } from '@/lib/server/auth';
 import { db } from '@/lib/server/db';
 import { writeUsageLog } from '@/lib/server/card-service';
 import { getClientIP } from '@/lib/server/card-utils';
@@ -71,5 +71,5 @@ export async function POST(request: NextRequest) {
     ip,
     detail: { by: auth.username },
   });
-  return NextResponse.json({ success: true });
+  return withRenewHeader(NextResponse.json({ success: true }), auth);
 }

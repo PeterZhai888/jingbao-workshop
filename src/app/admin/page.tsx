@@ -2546,7 +2546,7 @@ export default function AdminPage() {
     toast.error('登录已过期，请重新登录', { duration: 4000 });
   }, []);
 
-  // 带鉴权的 fetch 包装：收到 401 时自动触发 handleExpired
+  // 带鉴权的 fetch 包装：收到 401 时自动触发 handleExpired；收到续期头时自动更新 session
   const adminFetch = useCallback(
     async (input: string, init?: RequestInit, silent401 = false) => {
       const headers = { ...withAuth(session?.token || ''), ...(init?.headers || {}) };
@@ -2554,9 +2554,17 @@ export default function AdminPage() {
       if (res.status === 401) {
         if (!silent401) handleExpired();
       }
+      // 检查续期头：token 快过期时服务端会自动换新
+      const renewedToken = res.headers.get('X-Renewed-Token');
+      const renewedExpiresAt = res.headers.get('X-Renewed-Expires-At');
+      if (renewedToken && renewedExpiresAt && session) {
+        const updated: AdminSession = { ...session, token: renewedToken, expiresAt: renewedExpiresAt };
+        setSession(updated);
+        try { localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(updated)); } catch { /* ignore */ }
+      }
       return res;
     },
-    [session?.token, handleExpired],
+    [session, handleExpired],
   );
 
   // 初始化：读 localStorage + 本地过期检查

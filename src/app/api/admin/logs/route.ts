@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateAdmin } from '@/lib/server/auth';
+import { authenticateAdmin, withRenewHeader } from '@/lib/server/auth';
 import { db } from '@/lib/server/db';
 
 // 操作类型白名单（过滤参数只接受这些值，防止任意 SQL 值注入查询语义）
@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
     )
     .all(...params, pageSize, (page - 1) * pageSize);
 
-  return NextResponse.json({ success: true, items, total, page, pageSize });
+  return withRenewHeader(NextResponse.json({ success: true, items, total, page, pageSize }), auth);
 }
 
 /**
@@ -78,5 +78,5 @@ export async function DELETE(request: NextRequest) {
   } else {
     changes = db.prepare('DELETE FROM usage_logs').run().changes;
   }
-  return NextResponse.json({ success: true, deleted: changes });
+  return withRenewHeader(NextResponse.json({ success: true, deleted: changes }), auth);
 }

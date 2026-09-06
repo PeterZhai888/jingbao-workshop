@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateAdmin } from '@/lib/server/auth';
+import { authenticateAdmin, withRenewHeader } from '@/lib/server/auth';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -143,11 +143,14 @@ export async function POST(request: NextRequest) {
     initializeDatabase({ quiet: true });
   }
 
-  return NextResponse.json({
-    success: true,
-    message:
-      '数据库已成功恢复并重新加载。旧数据库已备份到 /backups/restore_before_*.db，如发现异常可在服务器卷中手动回滚。',
-  });
+  return withRenewHeader(
+    NextResponse.json({
+      success: true,
+      message:
+        '数据库已成功恢复并重新加载。旧数据库已备份到 /backups/restore_before_*.db，如发现异常可在服务器卷中手动回滚。',
+    }),
+    auth,
+  );
 }
 
 export const _touchDb = db;

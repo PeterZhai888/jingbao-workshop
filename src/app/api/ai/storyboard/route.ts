@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateCard, checkSensitive } from '@/lib/server/auth';
+import { authenticateCard, withRenewHeader, checkSensitive } from '@/lib/server/auth';
 import {
   writeUsageLog,
   touchCardUsage,
@@ -246,12 +246,15 @@ export async function POST(request: NextRequest) {
 
   touchCardUsage(cardId!, ip!, fingerprint!);
 
-  return NextResponse.json({
-    success: true,
-    id,
-    title,
-    shots,
-    provider: ai.provider,
-    cost,
-  });
+  return withRenewHeader(
+    NextResponse.json({
+      success: true,
+      id,
+      title,
+      shots,
+      provider: ai.provider,
+      cost,
+    }),
+    auth,
+  );
 }

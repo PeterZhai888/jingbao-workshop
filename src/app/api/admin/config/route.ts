@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateAdmin } from '@/lib/server/auth';
+import { authenticateAdmin, withRenewHeader } from '@/lib/server/auth';
 import { db } from '@/lib/server/db';
 import { CONFIG } from '@/lib/server/config';
 import { listProviders, PROVIDER_KEYS } from '@/lib/server/ai-provider';
@@ -16,37 +16,40 @@ export function GET(request: NextRequest) {
   const rows = db.prepare('SELECT key, value FROM system_config').all() as Array<{ key: string; value: string }>;
   const map: Record<string, string> = {};
   for (const r of rows) map[r.key] = r.value;
-  return NextResponse.json({
-    success: true,
-    config: {
-      defaultProvider: map.default_provider || 'qwen',
-      dailyLimit: parseInt(map.daily_limit || String(CONFIG.DAILY_LIMIT), 10),
-      qpsLimit: parseInt(map.qps_limit || '10', 10),
-      tierAccess: map.tier_access || 'all',
-    },
-    // 每家提供商的配置状态明细（不含密钥明文）
-    providers: listProviders(),
-    // 运行护栏：紧急暂停开关 + 全局每日上限
-    guard: {
-      servicePaused: map.service_paused === '1',
-      globalDailyLimit: parseInt(map.global_daily_limit || '0', 10),
-    },
-    // 次数用尽引导文案（空 = 不提示）
-    exhaustedTip: map.exhausted_tip || '',
-    // 全站顶部公告
-    notice: {
-      enabled: map.notice_enabled === '1',
-      content: map.notice_content || '',
-      link: map.notice_link || '',
-      type: (map.notice_type || 'info') as 'info' | 'warning' | 'danger',
-    },
-    // 安全状态：JWT 密钥仍在用开发默认值时提醒（生产模式会在服务端拒绝启动，此标记主要覆盖开发/预览环境）
-    security: {
-      usingFallbackJwtSecret: isUsingFallbackJwtSecret,
-      // API Key 加密存储是否生效（需配置 CONFIG_ENCRYPTION_KEY 环境变量）
-      apiKeyEncrypted: isEncryptionEnabled(),
-    },
-  });
+  return withRenewHeader(
+    NextResponse.json({
+      success: true,
+      config: {
+        defaultProvider: map.default_provider || 'qwen',
+        dailyLimit: parseInt(map.daily_limit || String(CONFIG.DAILY_LIMIT), 10),
+        qpsLimit: parseInt(map.qps_limit || '10', 10),
+        tierAccess: map.tier_access || 'all',
+      },
+      // 每家提供商的配置状态明细（不含密钥明文）
+      providers: listProviders(),
+      // 运行护栏：紧急暂停开关 + 全局每日上限
+      guard: {
+        servicePaused: map.service_paused === '1',
+        globalDailyLimit: parseInt(map.global_daily_limit || '0', 10),
+      },
+      // 次数用尽引导文案（空 = 不提示）
+      exhaustedTip: map.exhausted_tip || '',
+      // 全站顶部公告
+      notice: {
+        enabled: map.notice_enabled === '1',
+        content: map.notice_content || '',
+        link: map.notice_link || '',
+        type: (map.notice_type || 'info') as 'info' | 'warning' | 'danger',
+      },
+      // 安全状态：JWT 密钥仍在用开发默认值时提醒（生产模式会在服务端拒绝启动，此标记主要覆盖开发/预览环境）
+      security: {
+        usingFallbackJwtSecret: isUsingFallbackJwtSecret,
+        // API Key 加密存储是否生效（需配置 CONFIG_ENCRYPTION_KEY 环境变量）
+        apiKeyEncrypted: isEncryptionEnabled(),
+      },
+    }),
+    auth,
+  );
 }
 
 export async function POST(request: NextRequest) {
@@ -166,7 +169,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({ success: true });
+  return withRenewHeader(NextResponse.json({ success: true }), auth);
 }
 
 /**
@@ -192,5 +195,5 @@ export async function DELETE(request: NextRequest) {
   const del = db.prepare('DELETE FROM system_config WHERE key = ?');
   del.run(`ai_key_${provider}`);
   del.run(`ai_model_${provider}`);
-  return NextResponse.json({ success: true });
+  return withRenewHeader(NextResponse.json({ success: true }), auth);
 }

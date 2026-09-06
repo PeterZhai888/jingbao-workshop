@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateAdmin } from '@/lib/server/auth';
+import { authenticateAdmin, withRenewHeader } from '@/lib/server/auth';
 import { db, CardStatus } from '@/lib/server/db';
 import { setCardStatus, writeUsageLog } from '@/lib/server/card-service';
 import { getClientIP } from '@/lib/server/card-utils';
@@ -38,13 +38,16 @@ export async function GET(request: NextRequest) {
     )
     .all(...args, pageSize, (page - 1) * pageSize);
 
-  return NextResponse.json({
-    success: true,
-    total: totalRow.c,
-    page,
-    pageSize,
-    items: rows,
-  });
+  return withRenewHeader(
+    NextResponse.json({
+      success: true,
+      total: totalRow.c,
+      page,
+      pageSize,
+      items: rows,
+    }),
+    auth,
+  );
 }
 
 // POST 修改卡密状态（冻结/作废/解冻）
@@ -77,7 +80,7 @@ export async function POST(request: NextRequest) {
     ip,
     detail: { by: auth.username, to: status },
   });
-  return NextResponse.json({ success: true });
+  return withRenewHeader(NextResponse.json({ success: true }), auth);
 }
 
 /**
@@ -127,12 +130,15 @@ export async function DELETE(request: NextRequest) {
     detail: { by: auth.username, deleted, skipped: skipped.length, codes: codes.slice(0, 20) },
   });
 
-  return NextResponse.json({
-    success: true,
-    deleted,
-    skipped,
-    message: skipped.length
-      ? `已删除 ${deleted} 张；${skipped.length} 张非未激活状态未删除（已激活卡密请使用冻结/作废）`
-      : `已删除 ${deleted} 张卡密`,
-  });
+  return withRenewHeader(
+    NextResponse.json({
+      success: true,
+      deleted,
+      skipped,
+      message: skipped.length
+        ? `已删除 ${deleted} 张；${skipped.length} 张非未激活状态未删除（已激活卡密请使用冻结/作废）`
+        : `已删除 ${deleted} 张卡密`,
+    }),
+    auth,
+  );
 }

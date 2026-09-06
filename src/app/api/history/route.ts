@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateCard } from '@/lib/server/auth';
+import { authenticateCard, withRenewHeader } from '@/lib/server/auth';
 import { listGeneratedHistory, deleteGeneratedHistory, clearGeneratedHistory } from '@/lib/server/card-service';
 
 export function GET(request: NextRequest) {
@@ -37,7 +37,7 @@ export function GET(request: NextRequest) {
     }
   });
 
-  return NextResponse.json({ success: true, items });
+  return withRenewHeader(NextResponse.json({ success: true, items }), auth);
 }
 
 /**
@@ -60,9 +60,9 @@ export async function DELETE(request: NextRequest) {
     if (!deleted) {
       return NextResponse.json({ success: false, error: '记录不存在或已删除' }, { status: 404 });
     }
-    return NextResponse.json({ success: true, deleted: 1 });
+    return withRenewHeader(NextResponse.json({ success: true, deleted: 1 }), auth);
   }
 
   const count = clearGeneratedHistory(auth.cardId!);
-  return NextResponse.json({ success: true, deleted: count });
+  return withRenewHeader(NextResponse.json({ success: true, deleted: count }), auth);
 }

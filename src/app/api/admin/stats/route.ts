@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateAdmin } from '@/lib/server/auth';
+import { authenticateAdmin, withRenewHeader } from '@/lib/server/auth';
 import { db } from '@/lib/server/db';
 import { autoExpire } from '@/lib/server/card-service';
 import { todayStartKey, tzModifier } from '@/lib/server/card-utils';
@@ -127,17 +127,20 @@ export async function GET(request: NextRequest) {
     db.prepare(`SELECT COUNT(*) AS c FROM cards WHERE status = 'active'`).get() as { c: number }
   ).c;
 
-  return NextResponse.json({
-    success: true,
-    cardsTotal,
-    activeCards,
-    logsTotal,
-    todayGen: todayRows.length,
-    todayCost,
-    trend7d,
-    tierRatio,
-    remarkStats,
-  });
+  return withRenewHeader(
+    NextResponse.json({
+      success: true,
+      cardsTotal,
+      activeCards,
+      logsTotal,
+      todayGen: todayRows.length,
+      todayCost,
+      trend7d,
+      tierRatio,
+      remarkStats,
+    }),
+    auth,
+  );
 }
 
 // 导出类型供前端使用（编译期消除）

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateAdmin } from '@/lib/server/auth';
+import { authenticateAdmin, withRenewHeader } from '@/lib/server/auth';
 import { db } from '@/lib/server/db';
 import { writeUsageLog } from '@/lib/server/card-service';
 import { getClientIP } from '@/lib/server/card-utils';
@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
   for (const r of countRows) counts[r.status] = r.c;
   counts.all = Object.values(counts).reduce((s, n) => s + n, 0);
 
-  return NextResponse.json({ success: true, rows, total, page, pageSize, counts });
+  return withRenewHeader(NextResponse.json({ success: true, rows, total, page, pageSize, counts }), auth);
 }
 
 /** PATCH 管理员处理反馈：回复内容 / 更新状态 body: { id, adminReply?, status? } */
@@ -104,5 +104,5 @@ export async function PATCH(request: NextRequest) {
     detail: { by: auth.username, feedbackId: id, status: nextStatus },
   });
 
-  return NextResponse.json({ success: true });
+  return withRenewHeader(NextResponse.json({ success: true }), auth);
 }
