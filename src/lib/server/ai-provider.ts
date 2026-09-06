@@ -502,18 +502,67 @@ function findLastBalancedJSON(text: string): { start: number; end: number } | nu
   return null;
 }
 
+/**
+ * 把 LLM 输出中常见的全角标点规范化为 ASCII 半角。
+ * 千问/豆包等中文模型偶尔会用全角字符作为 JSON 结构符（逗号、冒号、方括号），
+ * 导致原生 JSON.parse 直接失败。在找括号配对之前先替换，能让 findLastBalancedJSON
+ * 正确定位边界，也让后续 repairJSON 只需关注引号/注释/尾逗号等瑕疵。
+ */
+function normalizeFullwidth(text: string): string {
+  return text
+    // 全角圆括号 （ ）→ ( )
+    .replace(/\uff08/g, '(')
+    .replace(/\uff09/g, ')')
+    // 全角方括号 【 】→ [ ]
+    .replace(/\u3010/g, '[')
+    .replace(/\u3011/g, ']')
+    // 全角角括号 〈 〉→ < >
+    .replace(/\u300a/g, '<')
+    .replace(/\u300b/g, '>')
+    // 全角冒号
+    .replace(/\uff1a/g, ':')
+    // 全角逗号
+    .replace(/\uff0c/g, ',')
+    // 全角分号
+    .replace(/\uff1b/g, ';')
+    // 最后把圆括号 ( ) 替换成方括号 [ ]——千问偶尔用圆括号包数组
+    .replace(/\(/g, '[').replace(/\)/g, ']');
+}
+
+/**
+ * 修复 LLM 生成 JSON 的常见瑕疵：
+ *  - 全角/智能引号 → ASCII 双引号
+ *  - 行注释 // ... 和块注释 /* ... *\/ 去掉
+ *  - 尾逗号 ,}、,] 去掉
+ * 返回修复后的字符串（可能仍不合法，调用方自行再试 JSON.parse）。
+ */
+function repairJSON(raw: string): string {
+  return raw
+    .replace(/[\u201c\u201d]/g, '"') // " " → "
+    .replace(/[\u2018\u2019]/g, '"') // ' ' → "
+    .replace(/\/\/[^\n]*/g, '') // 行注释
+    .replace(/\/\*[\s\S]*?\*\//g, '') // 块注释
+    .replace(/,\s*([\]}])/g, '$1'); // 尾逗号
+}
+
 /** 从 LLM 输出文本中稳健提取 JSON 数组/对象。 */
 export function extractJSON<T>(raw: string): T | null {
   if (!raw) return null;
 
-  // 第 1 步：先剥掉 <think> 思考块——千问/豆包等思考型模型有时会把 CoT 直接混进 content
-  const cleaned = stripThinkBlocks(raw).trim();
+  // 第 1 步：剥掉 <think> 思考块 + 全角标点规范化
+  const cleaned = normalizeFullwidth(stripThinkBlocks(raw)).trim();
+
+  // 尝试 parse：先原样试，不行再做瑕疵修复
+  const tryParse = (slice: string): T | null => {
+    try { return JSON.parse(slice) as T; } catch { /* 继续 */ }
+    try { return JSON.parse(repairJSON(slice)) as T; } catch { return null; }
+  };
 
   // 第 2 步：代码块优先（```json ... ```）
   const fence = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fence?.[1]) {
-    const inner = fence[1].trim();
-    try { return JSON.parse(inner) as T; } catch { /* 继续 */ }
+    const r = tryParse(fence[1].trim());
+    if (r !== null) return r;
   }
 
   // 第 3 步：最右平衡 JSON 块——兜底方案，从末尾反向找最后一个完整平衡的 JSON
@@ -521,7 +570,8 @@ export function extractJSON<T>(raw: string): T | null {
   const balanced = findLastBalancedJSON(cleaned);
   if (balanced) {
     const slice = cleaned.slice(balanced.start, balanced.end + 1);
-    try { return JSON.parse(slice) as T; } catch { /* 继续 */ }
+    const r = tryParse(slice);
+    if (r !== null) return r;
   }
 
   // 第 4 步：原始策略——第一个 [/{ 到最后一个 ]/}
@@ -529,12 +579,8 @@ export function extractJSON<T>(raw: string): T | null {
   const end = Math.max(cleaned.lastIndexOf(']'), cleaned.lastIndexOf('}'));
   if (Number.isFinite(start) && end > start) {
     const slice = cleaned.slice(start, end + 1);
-    try { return JSON.parse(slice) as T; } catch { /* 继续 */ }
-    // 常见瑕疵修复：尾逗号、全角引号、ASCII 换行
-    const repaired = slice
-      .replace(/[\u201c\u201d]/g, '"')
-      .replace(/,\s*([\]}])/g, '$1');
-    try { return JSON.parse(repaired) as T; } catch { /* 继续 */ }
+    const r = tryParse(slice);
+    if (r !== null) return r;
   }
 
   return null;
