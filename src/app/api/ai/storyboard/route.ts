@@ -183,6 +183,7 @@ export async function POST(request: NextRequest) {
 
   // 解析 LLM 输出
   const parsed = extractJSON<StoryboardShot[]>(ai.content);
+  const contentPreview = ai.content.slice(0, 200).replace(/\s+/g, ' ');
   if (!parsed || !Array.isArray(parsed) || parsed.length === 0 || !parsed[0]?.sceneDescription) {
     writeUsageLog({
       cardId: cardId!,
@@ -192,7 +193,7 @@ export async function POST(request: NextRequest) {
       ip,
       userAgent,
       fingerprint,
-      detail: `AI_PARSE_FAIL (${ai.provider})`,
+      detail: `AI_PARSE_FAIL (${ai.provider}) len=${parsed && Array.isArray(parsed) ? parsed.length : 0} preview="${contentPreview}"`,
     });
     return NextResponse.json(
       {

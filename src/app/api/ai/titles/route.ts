@@ -136,6 +136,7 @@ export async function POST(request: NextRequest) {
     maxRetries: 1, // 超时重试同样消耗豆包 token，控制在最多 2 次尝试
     preferred,
     model,
+    suppressThinking: true, // 纯格式化输出任务：关思考防 <think> 污染 JSON 解析
   });
 
   if (!ai.ok) {
@@ -162,8 +163,13 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const parsed = extractJSON<string[]>(ai.content);
-  if (!parsed || !Array.isArray(parsed) || parsed.length < 3) {
+  const parsed = extractJSON<unknown[]>(ai.content);
+  // 校验：数组、元素全为字符串、至少 3 条
+  const titles = Array.isArray(parsed)
+    ? parsed.map((t) => (typeof t === 'string' ? t : String(t))).map((s) => s.trim()).filter(Boolean)
+    : [];
+  const contentPreview = ai.content.slice(0, 200).replace(/\s+/g, ' ');
+  if (titles.length < 3) {
     writeUsageLog({
       cardId: cardId!,
       cardCode: cardCode!,
@@ -172,7 +178,7 @@ export async function POST(request: NextRequest) {
       ip,
       userAgent,
       fingerprint,
-      detail: `AI_PARSE_FAIL (${ai.provider})`,
+      detail: `AI_PARSE_FAIL (${ai.provider}) len=${titles.length} preview="${contentPreview}"`,
     });
     return NextResponse.json(
       {
@@ -200,19 +206,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { success: false, code: 'DAILY_LIMIT', error: '今日AI生成次数已用完，请明天再来', tip: getExhaustedTip() },
       { status: 429 },
-    );
-  }
-
-  const titles = parsed.map((t) => String(t).trim()).filter(Boolean).slice(0, 10);
-  if (titles.length < 3) {
-    return NextResponse.json(
-      {
-        success: false,
-        code: 'AI_BUSY',
-        error: 'AI服务繁忙，请稍后再试',
-        fallback: { titles: fallbackTitles(topic), note: '以下为基础模板标题（本次不消耗次数），稍后可重新生成' },
-      },
-      { status: 503 },
     );
   }
 

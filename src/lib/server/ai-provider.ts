@@ -347,6 +347,13 @@ export interface CallAIOptions {
   maxRetries?: number;  // 超时/5xx 自动重试次数，默认 2 次
   preferred?: ProviderKey;
   model?: string;       // 用户指定的模型 ID（必须在 preferred 提供商目录白名单内）
+  /**
+   * 是否请求提供商关闭深度思考（CoT）模式。
+   * - 标题/文案等纯格式化输出任务应传 true：避免 <think> 块污染 JSON 解析，且响应更快更省 token
+   * - 分镜等用户可能在意创意洞察的任务可不传（默认 false，保留思考）
+   * 仅对千问 (enable_thinking:false) 和豆包 (thinking:{type:'disabled'}) 生效，其他提供商忽略。
+   */
+  suppressThinking?: boolean;
 }
 
 export interface CallAIResult {
@@ -380,18 +387,29 @@ export async function callAI(options: CallAIOptions): Promise<CallAIResult> {
     try {
       // 沙箱/企业网络需走 HTTP(S)_PROXY 代理访问外部 API；无代理环境用全局 fetch
       const doFetch = getProxyFetch()?.fetch ?? ((u: string, i: RequestInit) => fetch(u, i));
+      // 构建请求体：按提供商按需注入关闭思考的参数（仅 suppressThinking 时）
+      // 千问 DashScope 兼容模式用 enable_thinking:false；豆包方舟用 thinking:{type:'disabled'}
+      const body: Record<string, unknown> = {
+        model: provider.model,
+        messages: options.messages,
+        temperature: 0.8,
+        stream: false,
+      };
+      if (options.suppressThinking) {
+        if (provider.key === 'qwen') {
+          body.enable_thinking = false;
+        } else if (provider.key === 'doubao') {
+          body.thinking = { type: 'disabled' };
+        }
+      }
+
       const res = await doFetch(`${provider.baseURL}/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `${provider.authPrefix} ${provider.apiKey}`,
         },
-        body: JSON.stringify({
-          model: provider.model,
-          messages: options.messages,
-          temperature: 0.8,
-          stream: false,
-        }),
+        body: JSON.stringify(body),
         signal: controller.signal,
       });
 
@@ -424,28 +442,86 @@ export async function callAI(options: CallAIOptions): Promise<CallAIResult> {
   return { ok: false, content: '', provider: provider.label, error: 'RETRIES_EXHAUSTED' };
 }
 
-/** 从 LLM 输出文本中稳健提取 JSON 数组/对象（容忍 ```json 代码块包裹） */
-export function extractJSON<T>(raw: string): T | null {
-  if (!raw) return null;
-  // 优先找 ```json ... ``` 代码块
-  const fence = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
-  const candidates = [fence?.[1], raw].filter(Boolean) as string[];
-  for (const c of candidates) {
-    const trimmed = c.trim();
-    // 直接尝试
-    try { return JSON.parse(trimmed) as T; } catch { /* 继续找 */ }
-    // 尝试截取第一个 [ 或 { 到最后一个 ] 或 }
-    const start = Math.min(...[trimmed.indexOf('['), trimmed.indexOf('{')].filter((i) => i >= 0));
-    const end = Math.max(trimmed.lastIndexOf(']'), trimmed.lastIndexOf('}'));
-    if (Number.isFinite(start) && end > start) {
-      const slice = trimmed.slice(start, end + 1);
-      try { return JSON.parse(slice) as T; } catch { /* 继续找 */ }
-      // 常见输出瑕疵修复：尾逗号（["a","b",]）、全角引号（["a"]）后再试一次
-      const repaired = slice
-        .replace(/[\u201c\u201d]/g, '"')
-        .replace(/,\s*([\]}])/g, '$1');
-      try { return JSON.parse(repaired) as T; } catch { /* 继续找 */ }
+/** 剥离 LLM 输出中的 <think>...</think> 思考块（含自闭合 <think/> 和 OpenClaw 风格） */
+function stripThinkBlocks(raw: string): string {
+  // 配对块：<think> 或 <thinking> 开头，</think> 或 </thinking> 结尾（可能跨行）
+  const withBlocks = raw.replace(/<\s*(?:think|thinking)\s*>[\s\S]*?<\s*\/\s*(?:think|thinking)\s*>/gi, '');
+  // 自闭合：<think/> 或 <thinking />
+  return withBlocks.replace(/<\s*(?:think|thinking)\s*\/?\s*>/gi, '');
+}
+
+/**
+ * 在字符串中从末尾反向搜索最后一个完整平衡的 JSON 块（[] 或 {}）。
+ * 思路：答案永远在思考之后，从末尾往前找能避开思考里的示例数组污染。
+ * 返回 { start, end+1 } 切片，找不到返回 null。
+ */
+function findLastBalancedJSON(text: string): { start: number; end: number } | null {
+  let lastOpenArr = -1;
+  let lastOpenObj = -1;
+  // 反向找最后一个未闭合的 [ 和 {
+  for (let i = text.length - 1; i >= 0; i--) {
+    const ch = text[i];
+    if (lastOpenArr === -1 && ch === '[') lastOpenArr = i;
+    if (lastOpenObj === -1 && ch === '{') lastOpenObj = i;
+    if (lastOpenArr !== -1 && lastOpenObj !== -1) break;
+  }
+  const openIdx = Math.max(lastOpenArr, lastOpenObj);
+  if (openIdx < 0) return null;
+  const openCh = text[openIdx];
+  const closeCh = openCh === '[' ? ']' : '}';
+  // 从 openIdx 往前做括号配对，跳过字符串内的括号
+  let depth = 0;
+  let inStr = false;
+  let escape = false;
+  for (let i = openIdx; i < text.length; i++) {
+    const ch = text[i];
+    if (escape) { escape = false; continue; }
+    if (ch === '\\') { escape = true; continue; }
+    if (ch === '"') { inStr = !inStr; continue; }
+    if (inStr) continue;
+    if (ch === openCh) depth++;
+    else if (ch === closeCh) {
+      depth--;
+      if (depth === 0) return { start: openIdx, end: i };
     }
   }
+  return null;
+}
+
+/** 从 LLM 输出文本中稳健提取 JSON 数组/对象。 */
+export function extractJSON<T>(raw: string): T | null {
+  if (!raw) return null;
+
+  // 第 1 步：先剥掉 <think> 思考块——千问/豆包等思考型模型有时会把 CoT 直接混进 content
+  const cleaned = stripThinkBlocks(raw).trim();
+
+  // 第 2 步：代码块优先（```json ... ```）
+  const fence = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fence?.[1]) {
+    const inner = fence[1].trim();
+    try { return JSON.parse(inner) as T; } catch { /* 继续 */ }
+  }
+
+  // 第 3 步：最右平衡 JSON 块——兜底方案，从末尾反向找最后一个完整平衡的 JSON
+  // （答案在思考之后，反向找能避开思考里的示例数组污染）
+  const balanced = findLastBalancedJSON(cleaned);
+  if (balanced) {
+    const slice = cleaned.slice(balanced.start, balanced.end + 1);
+    try { return JSON.parse(slice) as T; } catch { /* 继续 */ }
+  }
+
+  // 第 4 步：原始策略——第一个 [/{ 到最后一个 ]/}
+  const start = Math.min(...[cleaned.indexOf('['), cleaned.indexOf('{')].filter((i) => i >= 0));
+  const end = Math.max(cleaned.lastIndexOf(']'), cleaned.lastIndexOf('}'));
+  if (Number.isFinite(start) && end > start) {
+    const slice = cleaned.slice(start, end + 1);
+    try { return JSON.parse(slice) as T; } catch { /* 继续 */ }
+    // 常见瑕疵修复：尾逗号、全角引号、ASCII 换行
+    const repaired = slice
+      .replace(/[\u201c\u201d]/g, '"')
+      .replace(/,\s*([\]}])/g, '$1');
+    try { return JSON.parse(repaired) as T; } catch { /* 继续 */ }
+  }
+
   return null;
 }
