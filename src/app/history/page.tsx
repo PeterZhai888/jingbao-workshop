@@ -19,8 +19,18 @@ import {
   Copy,
   CheckCircle2,
   ChevronDown,
+  Film,
 } from 'lucide-react';
 import type { HistoryItem, StoryboardResult, TitleResult } from '@/lib/types';
+import {
+  VIDEO_GEN_MODELS,
+  DEFAULT_VIDEO_MODEL_ID,
+  getVideoModel,
+  buildVideoSegments,
+  segmentToText,
+  shotToText,
+  type VideoSegment,
+} from '@/lib/video-segments';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -59,6 +69,9 @@ export default function HistoryPage() {
   const [copiedShot, setCopiedShot] = useState<number | null>(null);
   const [copiedTitle, setCopiedTitle] = useState<number | null>(null);
   const [clearing, setClearing] = useState(false);
+  // AI视频生成段：目标视频模型（时长上限）选择 + 段复制反馈
+  const [videoModelId, setVideoModelId] = useState(DEFAULT_VIDEO_MODEL_ID);
+  const [copiedSeg, setCopiedSeg] = useState<number | null>(null);
 
   const loadHistory = async () => {
     setLoading(true);
@@ -103,6 +116,7 @@ export default function HistoryPage() {
     setCopiedAll(false);
     setCopiedShot(null);
     setCopiedTitle(null);
+    setCopiedSeg(null);
   }, [selected?.id]);
 
   const handleDelete = async (id: string) => {
@@ -144,16 +158,22 @@ export default function HistoryPage() {
     }
   };
 
-  // ===== 复制 =====
-  const shotTypeLabel = (s: StoryboardResult['shots'][number]) =>
-    s.shotType === 'real' ? '[真人实拍] ' : s.shotType === 'ai' ? '[AI画面] ' : '';
-  const storyboardToText = (item: StoryboardResult) =>
-    item.shots
-      .map(
-        (s) =>
-          `【镜头${s.shotNumber}】${shotTypeLabel(s)}时长：${s.duration} | 运镜：${s.cameraMove}\n画面：${s.sceneDescription}\n台词：${s.dialogue || '（无）'}`,
-      )
-      .join('\n\n');
+  // ===== 复制 =====（单镜头文本格式统一走 video-segments 的 shotToText）
+  const storyboardToText = (item: StoryboardResult) => item.shots.map(shotToText).join('\n\n');
+
+  // AI视频生成段：ai 模式与无创作方式标记的旧记录（旧版分镜即面向 AI 视频工具）参与分段
+  const activeVideoModel = getVideoModel(videoModelId);
+  const videoSegments: VideoSegment[] =
+    selected && isStoryboard(selected) && (!selected.creationMode || selected.creationMode === 'ai')
+      ? buildVideoSegments(selected.shots, activeVideoModel.maxDuration)
+      : [];
+
+  const handleCopySegment = (seg: VideoSegment) => {
+    navigator.clipboard.writeText(segmentToText(seg));
+    setCopiedSeg(seg.index);
+    setTimeout(() => setCopiedSeg(null), 1500);
+    toast.success(`已复制生成段 ${seg.index}`);
+  };
 
   const titlesToText = (item: TitleResult) =>
     item.titles.map((t, i) => `${i + 1}. ${t}`).join('\n');
@@ -168,8 +188,7 @@ export default function HistoryPage() {
   };
 
   const handleCopyShot = (item: StoryboardResult, idx: number) => {
-    const s = item.shots[idx];
-    const text = `【镜头${s.shotNumber}】${shotTypeLabel(s)}时长：${s.duration} | 运镜：${s.cameraMove}\n画面：${s.sceneDescription}\n台词：${s.dialogue || '（无）'}`;
+    const text = shotToText(item.shots[idx]);
     navigator.clipboard.writeText(text);
     setCopiedShot(idx);
     setTimeout(() => setCopiedShot(null), 1500);
@@ -389,6 +408,75 @@ export default function HistoryPage() {
                   {/* 结果 */}
                   {isStoryboard(selected) ? (
                     <div className="space-y-2.5">
+                      {videoSegments.length > 0 && (
+                        <div className="rounded-xl border border-violet-200 bg-violet-50/40 p-4 space-y-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="text-sm font-semibold text-violet-800 flex items-center gap-1.5">
+                              <Film className="h-4 w-4" />
+                              AI视频生成段
+                            </div>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="text-xs text-muted-foreground">单次生成上限</span>
+                              {VIDEO_GEN_MODELS.map((m) => (
+                                <button
+                                  key={m.id}
+                                  type="button"
+                                  onClick={() => setVideoModelId(m.id)}
+                                  className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
+                                    videoModelId === m.id
+                                      ? 'bg-violet-600 text-white shadow-sm'
+                                      : 'border border-violet-200 bg-white text-violet-700 hover:border-violet-400'
+                                  }`}
+                                >
+                                  {m.label} · {m.maxDuration}秒
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="space-y-1.5">
+                            {videoSegments.map((seg) => {
+                              const first = seg.shots[0]?.shotNumber ?? 0;
+                              const last = seg.shots[seg.shots.length - 1]?.shotNumber ?? 0;
+                              const range = first === last ? `镜头 ${first}` : `镜头 ${first}-${last}`;
+                              return (
+                                <div
+                                  key={seg.index}
+                                  className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-white px-3 py-2 ${
+                                    seg.exceeds || seg.hasUnknown ? 'border-amber-300' : 'border-violet-100'
+                                  }`}
+                                >
+                                  <div className="text-sm min-w-0">
+                                    <span className="font-medium text-violet-800">生成段 {seg.index}</span>
+                                    <span className="text-muted-foreground mx-1.5">·</span>
+                                    <span>{range}</span>
+                                    <span className="text-muted-foreground mx-1.5">·</span>
+                                    <span className={seg.totalSeconds === null ? 'text-amber-600' : undefined}>
+                                      {seg.totalSeconds === null ? '时长未知，建议单独生成' : `预计 ${seg.totalSeconds} 秒`}
+                                    </span>
+                                    {seg.exceeds && (
+                                      <span className="block text-xs text-amber-600 mt-0.5">
+                                        该镜头时长已超出 {activeVideoModel.label} 的 {activeVideoModel.maxDuration} 秒上限，建议精简画面描述或拆分镜头
+                                      </span>
+                                    )}
+                                  </div>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleCopySegment(seg)}
+                                    className="gap-1.5 h-8 shrink-0"
+                                  >
+                                    {copiedSeg === seg.index ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                                    {copiedSeg === seg.index ? '已复制' : '复制本段'}
+                                  </Button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <p className="text-xs text-muted-foreground leading-relaxed">
+                            每个生成段的总时长已控制在所选模型的单次生成上限内，点击「复制本段」后可直接粘贴到视频模型连续生成。
+                          </p>
+                        </div>
+                      )}
                       {selected.shots.map((shot, idx) => {
                         const shotCopied = copiedShot === idx;
                         return (

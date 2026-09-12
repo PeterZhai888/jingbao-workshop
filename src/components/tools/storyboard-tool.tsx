@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useCardAuth } from '@/lib/card-auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,12 +19,22 @@ import {
   Sparkles,
   RefreshCw,
   CheckCircle2,
+  Film,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ModelSelector, type ModelSelection } from '@/components/model-selector';
 import { GeneratingProgress } from '@/components/generating-progress';
 import { FeedbackDialog, type FeedbackContext } from '@/components/feedback-dialog';
 import type { StoryboardShot, StoryboardResult, CreationMode } from '@/lib/types';
+import {
+  VIDEO_GEN_MODELS,
+  DEFAULT_VIDEO_MODEL_ID,
+  getVideoModel,
+  buildVideoSegments,
+  segmentToText,
+  shotToText,
+  type VideoSegment,
+} from '@/lib/video-segments';
 import {
   Table,
   TableBody,
@@ -75,6 +85,9 @@ export function StoryboardTool() {
   const [resultMeta, setResultMeta] = useState<{ id: string; title: string; creationMode?: Exclude<CreationMode, 'auto'> } | null>(null);
   const [copied, setCopied] = useState(false);
   const [model, setModel] = useState<ModelSelection>({ cost: 1 });
+  // AI视频生成段：目标视频模型（时长上限）选择 + 段复制反馈
+  const [videoModelId, setVideoModelId] = useState(DEFAULT_VIDEO_MODEL_ID);
+  const [copiedSeg, setCopiedSeg] = useState<number | null>(null);
   // 错误反馈：生成失败时 toast 上带"反馈"按钮，自动附带失败上下文
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedbackContext, setFeedbackContext] = useState<FeedbackContext | undefined>();
@@ -118,7 +131,7 @@ export function StoryboardTool() {
         // 演示模式：使用模拟数据
         await new Promise((r) => setTimeout(r, 1200));
         setResult(MOCK_SHOTS);
-        setResultMeta({ id: 'demo-' + Date.now(), title: '演示分镜脚本（非真实AI生成）' });
+        setResultMeta({ id: 'demo-' + Date.now(), title: '演示分镜脚本（非真实AI生成）', creationMode: 'ai' });
         toast.success('演示分镜已生成（预览模式）');
       } else {
         const res = await fetch('/api/ai/storyboard', {
@@ -177,10 +190,7 @@ export function StoryboardTool() {
 
   const handleCopy = () => {
     if (!result) return;
-    const text = result.map(
-      (s) =>
-        `【镜头${s.shotNumber}】${s.shotType === 'real' ? '[真人实拍] ' : s.shotType === 'ai' ? '[AI画面] ' : ''}时长：${s.duration} | 运镜：${s.cameraMove}\n画面：${s.sceneDescription}\n台词：${s.dialogue || '（无）'}`,
-    ).join('\n\n');
+    const text = result.map(shotToText).join('\n\n');
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -213,6 +223,23 @@ export function StoryboardTool() {
         return acc + (m ? parseInt(m[1]) : 0);
       }, 0)
     : 0;
+
+  // AI视频生成段：仅 AI视频模式结果展示（real/hybrid 镜头不进 AI 视频工具）
+  const activeVideoModel = getVideoModel(videoModelId);
+  const videoSegments = useMemo<VideoSegment[]>(
+    () =>
+      result && resultMeta?.creationMode === 'ai'
+        ? buildVideoSegments(result, activeVideoModel.maxDuration)
+        : [],
+    [result, resultMeta?.creationMode, activeVideoModel.maxDuration],
+  );
+
+  const handleCopySegment = (seg: VideoSegment) => {
+    navigator.clipboard.writeText(segmentToText(seg));
+    setCopiedSeg(seg.index);
+    setTimeout(() => setCopiedSeg(null), 1500);
+    toast.success(`已复制生成段 ${seg.index}（含镜头 ${seg.shots[0].shotNumber}-${seg.shots[seg.shots.length - 1].shotNumber}）`);
+  };
 
   return (
     <div className="space-y-6">
@@ -484,7 +511,77 @@ export function StoryboardTool() {
             )}
 
             {result && !loading && (
-              <Tabs defaultValue="cards">
+              <>
+                {resultMeta?.creationMode === 'ai' && (
+                  <div className="mb-4 rounded-xl border border-violet-200 bg-violet-50/40 p-4 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-sm font-semibold text-violet-800 flex items-center gap-1.5">
+                        <Film className="h-4 w-4" />
+                        AI视频生成段
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-xs text-muted-foreground">单次生成上限</span>
+                        {VIDEO_GEN_MODELS.map((m) => (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => setVideoModelId(m.id)}
+                            className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
+                              videoModelId === m.id
+                                ? 'bg-violet-600 text-white shadow-sm'
+                                : 'border border-violet-200 bg-white text-violet-700 hover:border-violet-400'
+                            }`}
+                          >
+                            {m.label} · {m.maxDuration}秒
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      {videoSegments.map((seg) => {
+                        const first = seg.shots[0]?.shotNumber ?? 0;
+                        const last = seg.shots[seg.shots.length - 1]?.shotNumber ?? 0;
+                        const range = first === last ? `镜头 ${first}` : `镜头 ${first}-${last}`;
+                        return (
+                          <div
+                            key={seg.index}
+                            className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-white px-3 py-2 ${
+                              seg.exceeds || seg.hasUnknown ? 'border-amber-300' : 'border-violet-100'
+                            }`}
+                          >
+                            <div className="text-sm min-w-0">
+                              <span className="font-medium text-violet-800">生成段 {seg.index}</span>
+                              <span className="text-muted-foreground mx-1.5">·</span>
+                              <span>{range}</span>
+                              <span className="text-muted-foreground mx-1.5">·</span>
+                              <span className={seg.totalSeconds === null ? 'text-amber-600' : undefined}>
+                                {seg.totalSeconds === null ? '时长未知，建议单独生成' : `预计 ${seg.totalSeconds} 秒`}
+                              </span>
+                              {seg.exceeds && (
+                                <span className="block text-xs text-amber-600 mt-0.5">
+                                  该镜头时长已超出 {activeVideoModel.label} 的 {activeVideoModel.maxDuration} 秒上限，建议精简画面描述或拆分镜头
+                                </span>
+                              )}
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleCopySegment(seg)}
+                              className="gap-1.5 h-8 shrink-0"
+                            >
+                              {copiedSeg === seg.index ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                              {copiedSeg === seg.index ? '已复制' : '复制本段'}
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      每个生成段的总时长已控制在所选模型的单次生成上限内，点击「复制本段」后可直接粘贴到视频模型连续生成；分段按镜头时长自动计算，若某段跨场景效果不理想，可改为逐镜头复制。
+                    </p>
+                  </div>
+                )}
+                <Tabs defaultValue="cards">
                 <TabsList className="mb-4">
                   <TabsTrigger value="cards">卡片视图</TabsTrigger>
                   <TabsTrigger value="table">表格视图</TabsTrigger>
@@ -605,6 +702,7 @@ export function StoryboardTool() {
                   </pre>
                 </TabsContent>
               </Tabs>
+              </>
             )}
           </CardContent>
         </Card>
