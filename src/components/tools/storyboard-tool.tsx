@@ -22,7 +22,7 @@ import {
   Film,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { ModelSelector, type ModelSelection } from '@/components/model-selector';
+import { ModelSelector, type ModelSelection, type ModelSuggestion } from '@/components/model-selector';
 import { GeneratingProgress } from '@/components/generating-progress';
 import { FeedbackDialog, type FeedbackContext } from '@/components/feedback-dialog';
 import type { StoryboardShot, StoryboardResult, CreationMode } from '@/lib/types';
@@ -69,6 +69,13 @@ const CREATION_MODES: { value: CreationMode; label: string; desc: string }[] = [
 
 const MODE_NAME: Record<Exclude<CreationMode, 'auto'>, string> = {
   real: '真人实拍', ai: 'AI视频', hybrid: '混合创作',
+};
+
+// 创作模式 → 推荐大模型厂商（实测匹配度）：AI视频/混合 → 豆包（分镜更易被 Seedance 等视频模型理解）；真人实拍 → 智谱（口播分镜质量佳）；auto 最终模式未知，不建议
+const MODEL_SUGGESTION: Partial<Record<Exclude<CreationMode, 'auto'>, ModelSuggestion>> = {
+  ai: { providerKey: 'doubao', reason: 'AI视频模式下，豆包系列模型生成的分镜更易被 Seedance 等视频模型理解' },
+  hybrid: { providerKey: 'doubao', reason: '混合创作模式下，豆包系列模型的 AI 画面提示词质量更佳' },
+  real: { providerKey: 'zhipu', reason: '真人实拍模式下，智谱AI系列模型的口播分镜质量更佳' },
 };
 
 export function StoryboardTool() {
@@ -270,7 +277,11 @@ export function StoryboardTool() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
-              <ModelSelector value={model} onChange={setModel} />
+              <ModelSelector
+                value={model}
+                onChange={setModel}
+                suggestion={creationMode === 'auto' ? undefined : MODEL_SUGGESTION[creationMode]}
+              />
             </div>
             <Textarea
               placeholder="例如：&#10;&#10;周末早晨，我决定给自己做一杯手冲咖啡。窗外阳光正好，咖啡豆的香气弥漫整个房间。慢下来，感受生活中的小确幸..."

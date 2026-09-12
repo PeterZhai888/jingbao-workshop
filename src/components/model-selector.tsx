@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Bot, Sparkles } from 'lucide-react';
+import { Bot, Lightbulb, Sparkles, X } from 'lucide-react';
 
 /** /api/ai/models 返回结构 */
 interface UserModels {
@@ -36,6 +36,14 @@ export interface ModelSelection {
   cost: number; // 1 = 默认/自动匹配
 }
 
+/** 创作模式对大模型厂商的建议：当前未选该厂商时在模型选择器内展示原因 + 一键切换 */
+export interface ModelSuggestion {
+  /** 推荐厂商 key（如 'doubao' / 'zhipu'） */
+  providerKey: string;
+  /** 展示给用户的建议原因 */
+  reason: string;
+}
+
 const STORAGE_KEY = 'ai_video_tool_model';
 const AUTO: ModelSelection = { cost: 1 };
 
@@ -43,12 +51,17 @@ const AUTO: ModelSelection = { cost: 1 };
 export function ModelSelector({
   value,
   onChange,
+  suggestion,
 }: {
   value: ModelSelection;
   onChange: (v: ModelSelection) => void;
+  /** 可选：创作模式的厂商建议（当前已选该厂商或已关闭建议时不显示） */
+  suggestion?: ModelSuggestion;
 }) {
   const { session } = useCardAuth();
   const [catalog, setCatalog] = useState<UserModels | null>(null);
+  // 用户主动关闭过建议的厂商 key；推荐厂商变化后自动失效、重新展示
+  const [dismissedKey, setDismissedKey] = useState<string | null>(null);
 
   // 拉取可选模型列表
   useEffect(() => {
@@ -108,45 +121,87 @@ export function ModelSelector({
     return `${p.label} ${m.tierLabel}`;
   }, [value, catalog]);
 
+  // 推荐厂商的默认模型（目录第一个，通常为极速/免费档，一键切换不额外增加次数成本）
+  const suggestedModel = useMemo(() => {
+    if (!suggestion || !catalog) return null;
+    const p = catalog.providers.find((x) => x.key === suggestion.providerKey);
+    return p && p.models.length > 0 ? p.models[0] : null;
+  }, [suggestion, catalog]);
+
+  // 当前未选推荐厂商、且用户未关闭该厂商的建议时展示提示条
+  const showSuggestion = !!suggestion && !!suggestedModel
+    && value.provider !== suggestion.providerKey
+    && dismissedKey !== suggestion.providerKey;
+
+  const applySuggestion = () => {
+    if (!suggestion || !suggestedModel) return;
+    handleSelect(`${suggestion.providerKey}::${suggestedModel.id}`);
+  };
+
   return (
-    <div className="flex items-center gap-2 w-full">
-      <Bot className="h-4 w-4 shrink-0 text-muted-foreground" />
-      <Select value={value.model ? `${value.provider}::${value.model}` : 'auto'} onValueChange={handleSelect}>
-        <SelectTrigger className="h-9 w-full gap-1.5 text-sm min-w-0">
-          <SelectValue placeholder="自动匹配" />
-        </SelectTrigger>
-        <SelectContent align="start" sideOffset={4}>
-          <SelectGroup>
-            <SelectLabel>模型</SelectLabel>
-            <SelectItem value="auto" className="gap-2">
-              <span className="flex items-center gap-1.5 font-medium">
-                <Sparkles className="h-3.5 w-3.5 text-primary" />
-                自动匹配
-                <span className="text-xs font-normal text-muted-foreground">（系统选择当前最优模型）</span>
-              </span>
-              <span className="ml-auto pl-3 text-xs text-muted-foreground">1次</span>
-            </SelectItem>
-            {catalog?.providers.map((p) => (
-              <SelectGroup key={p.key}>
-                <SelectLabel>{p.label}</SelectLabel>
-                {p.models.map((m) => (
-                  <SelectItem key={`${p.key}::${m.id}`} value={`${p.key}::${m.id}`} className="gap-2">
-                    <span className="flex flex-1 items-center justify-between gap-3 pr-1">
-                      <span>
-                        <span className="font-medium">{m.tierLabel}</span>
-                        <span className="ml-2 text-xs text-muted-foreground">{m.note}</span>
+    <div className="w-full min-w-0">
+      <div className="flex items-center gap-2 w-full">
+        <Bot className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <Select value={value.model ? `${value.provider}::${value.model}` : 'auto'} onValueChange={handleSelect}>
+          <SelectTrigger className="h-9 w-full gap-1.5 text-sm min-w-0">
+            <SelectValue placeholder="自动匹配" />
+          </SelectTrigger>
+          <SelectContent align="start" sideOffset={4}>
+            <SelectGroup>
+              <SelectLabel>模型</SelectLabel>
+              <SelectItem value="auto" className="gap-2">
+                <span className="flex items-center gap-1.5 font-medium">
+                  <Sparkles className="h-3.5 w-3.5 text-primary" />
+                  自动匹配
+                  <span className="text-xs font-normal text-muted-foreground">（系统选择当前最优模型）</span>
+                </span>
+                <span className="ml-auto pl-3 text-xs text-muted-foreground">1次</span>
+              </SelectItem>
+              {catalog?.providers.map((p) => (
+                <SelectGroup key={p.key}>
+                  <SelectLabel>{p.label}</SelectLabel>
+                  {p.models.map((m) => (
+                    <SelectItem key={`${p.key}::${m.id}`} value={`${p.key}::${m.id}`} className="gap-2">
+                      <span className="flex flex-1 items-center justify-between gap-3 pr-1">
+                        <span>
+                          <span className="font-medium">{m.tierLabel}</span>
+                          <span className="ml-2 text-xs text-muted-foreground">{m.note}</span>
+                        </span>
+                        <span className={`text-xs ${m.cost > 1 ? 'text-amber-600 font-medium' : 'text-muted-foreground'}`}>
+                          {m.cost}次
+                        </span>
                       </span>
-                      <span className={`text-xs ${m.cost > 1 ? 'text-amber-600 font-medium' : 'text-muted-foreground'}`}>
-                        {m.cost}次
-                      </span>
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            ))}
-          </SelectGroup>
-        </SelectContent>
-      </Select>
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </div>
+      {showSuggestion && suggestion && (
+        <div className="mt-1.5 flex w-full items-start gap-1.5 border-t border-border/40 pt-1.5 text-xs text-amber-700">
+          <Lightbulb className="h-3.5 w-3.5 shrink-0 mt-px" />
+          <span className="min-w-0 flex-1 leading-relaxed">{suggestion.reason}</span>
+          <span className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={applySuggestion}
+              className="rounded-md bg-amber-600 px-2 py-0.5 font-medium text-white transition-colors hover:bg-amber-700"
+            >
+              切换
+            </button>
+            <button
+              type="button"
+              aria-label="关闭建议"
+              onClick={() => setDismissedKey(suggestion.providerKey)}
+              className="text-amber-400 transition-colors hover:text-amber-700"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </span>
+        </div>
+      )}
     </div>
   );
 }
