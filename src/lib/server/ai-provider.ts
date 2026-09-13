@@ -125,7 +125,7 @@ export const MODEL_CATALOG: Record<ProviderKey, CatalogModel[]> = {
     { id: 'doubao-lite-4k', label: 'doubao-seed-2-0-lite · 极速（默认）', tier: 'fast', note: '速度快，日常生成推荐' },
     { id: 'doubao-lite-32k', label: 'doubao-seed-2-0-lite · 极速长文本', tier: 'fast', note: '极速响应，支持长文案' },
     { id: 'doubao-pro-4k', label: 'doubao-seed-2-1-turbo · 标准（推荐）', tier: 'standard', note: '质量速度平衡，适合日常生成' },
-    { id: 'doubao-pro-32k', label: 'doubao-seed-2-1-pro · 旗舰高质量', tier: 'plus', note: '最强质量，适合精写' },
+    { id: 'doubao-pro-32k', label: 'doubao-seed-2-1-pro · 最强旗舰', tier: 'flagship', note: '最强质量，适合精写' },
   ],
   siliconflow: [
     { id: 'Qwen/Qwen2.5-7B-Instruct', label: 'Qwen2.5-7B · 免费额度（默认）', tier: 'fast', note: '响应迅捷，出片更快' },
