@@ -256,14 +256,14 @@ export function initializeDatabase(options?: { quiet?: boolean }): void {
     }
   }
 
-  // ========= 初始化 system_config 默认值（全局每日上限默认 100，止损用） =========
-  // 先 INSERT OR IGNORE（新部署），再把 0 值更新为 100（老部署从无限改为有止损默认）
+  // ========= 初始化 system_config 默认值（全局每日上限默认 500，止损用） ==========
+  // 先 INSERT OR IGNORE（新部署），再把 0/100 的旧值更新为 500（老部署自动升级止损容量）
   const ensureConfig = _db.prepare(
     `INSERT OR IGNORE INTO system_config (key, value) VALUES (?, ?)`,
   );
-  ensureConfig.run('global_daily_limit', '100');
+  ensureConfig.run('global_daily_limit', '500');
   ensureConfig.run('default_provider', 'deepseek');
-  _db.prepare(`UPDATE system_config SET value = '100' WHERE key = 'global_daily_limit' AND value = '0'`).run();
+  _db.prepare(`UPDATE system_config SET value = '500' WHERE key = 'global_daily_limit' AND value IN ('0', '100')`).run();
 
   // ========= 备份调度 =========
   const backupDatabase = (): void => {
