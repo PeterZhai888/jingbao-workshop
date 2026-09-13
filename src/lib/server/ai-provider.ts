@@ -29,13 +29,13 @@ const PROVIDERS: Record<ProviderKey, ProviderDef> = {
   zhipu: {
     key: 'zhipu', label: '智谱AI',
     baseURL: 'https://open.bigmodel.cn/api/paas/v4',
-    model: 'glm-4-flash',
+    model: 'glm-5.3-flash',
     envKey: 'ZHIPU_API_KEY',
   },
   deepseek: {
     key: 'deepseek', label: 'DeepSeek',
     baseURL: 'https://api.deepseek.com/v1',
-    model: 'deepseek-chat',
+    model: 'deepseek-flash',
     envKey: 'DEEPSEEK_API_KEY',
     // 兼容部署文档宣传的通用变量名（LLM_API_KEY/LLM_BASE_URL/LLM_MODEL）：
     // .env.example 一直让用户填 LLM_API_KEY，但此前代码从未读取，导致部署后 AI 全部报"服务繁忙"
@@ -108,25 +108,27 @@ export const MODEL_CATALOG: Record<ProviderKey, CatalogModel[]> = {
     { id: 'qwen-max', label: 'qwen-max · 旗舰价，最强能力', tier: 'flagship', note: '最强质量，速度稍慢' },
   ],
   zhipu: [
-    { id: 'glm-4-flash', label: 'glm-4-flash · 免费（默认）', tier: 'fast', note: '响应迅捷，出片更快' },
-    { id: 'glm-4-air', label: 'glm-4-air · 低价', tier: 'standard', note: '均衡之选，文案质量佳' },
-    { id: 'glm-4-airx', label: 'glm-4-airx · 低价加速', tier: 'fast', note: '极速响应，适合快速迭代' },
-    { id: 'glm-4-plus', label: 'glm-4-plus · 标准价', tier: 'plus', note: '更强创意，适合精写' },
-    { id: 'glm-4-long', label: 'glm-4-long · 长文本', tier: 'standard', note: '长文本专用' },
+    { id: 'glm-5.3-flash', label: 'glm-5.3-flash · 免费极速（默认）', tier: 'fast', note: '免费，响应迅捷，支持多模态' },
+    { id: 'glm-5.3', label: 'glm-5.3 · 旗舰旗舰', tier: 'flagship', note: '最强质量，Coding 与 Agent 能力强' },
+    { id: 'glm-5.2', label: 'glm-5.2 · 次旗舰', tier: 'plus', note: '长程任务稳定，均衡之选' },
+    { id: 'glm-5.1', label: 'glm-5.1 · 前旗舰', tier: 'plus', note: '综合能力对标 Claude Opus 4.6' },
+    { id: 'glm-4-flash', label: 'glm-4-flash · 上一代免费版', tier: 'fast', note: '免费，稳定可用' },
+    { id: 'glm-4-plus', label: 'glm-4-plus · 上一代高质量', tier: 'plus', note: '质量均衡，性价比高' },
+    { id: 'glm-4-long', label: 'glm-4-long · 长文本专用', tier: 'standard', note: '1M 上下文，长文本处理' },
   ],
   deepseek: [
-    { id: 'deepseek-chat', label: 'deepseek-chat · 标准价（默认）', tier: 'standard', note: '均衡之选，文案质量佳' },
-    { id: 'deepseek-reasoner', label: 'deepseek-reasoner · 推理模型，稍贵', tier: 'flagship', note: '深度思考，最强质量' },
+    { id: 'deepseek-flash', label: 'deepseek-flash · V4.1 极速（默认）', tier: 'fast', note: '速度快、成本低，1M 上下文' },
+    { id: 'deepseek-v4-pro', label: 'deepseek-v4-pro · V4 旗舰', tier: 'flagship', note: '最强质量，Agent 与 Coding 能力顶级' },
   ],
   hunyuan: [
     { id: 'hy3', label: 'hy3 · 默认（已开通）', tier: 'standard', note: '均衡之选，文案质量佳' },
     { id: 'hy4-preview', label: 'hy4-preview · 高质量旗舰（已开通）', tier: 'plus', note: '更强创意，适合精写' },
   ],
   doubao: [
-    { id: 'doubao-lite-4k', label: 'Seed-2.0-lite · 极速（默认）', tier: 'fast', note: '速度快，日常生成推荐' },
-    { id: 'doubao-lite-32k', label: 'Seed-2.0-lite · 极速长文本', tier: 'fast', note: '极速响应，支持长文案' },
-    { id: 'doubao-pro-4k', label: 'Seed-2.1-Turbo · 标准（推荐）', tier: 'standard', note: '质量速度平衡，适合日常生成' },
-    { id: 'doubao-pro-32k', label: 'Seed-2.1-Turbo · 长文本', tier: 'plus', note: '长文案精写之选' },
+    { id: 'doubao-lite-4k', label: 'doubao-seed-2-0-lite · 极速（默认）', tier: 'fast', note: '速度快、成本低，日常生成推荐' },
+    { id: 'doubao-lite-32k', label: 'doubao-seed-2-0-lite · 极速长文本', tier: 'fast', note: '极速响应，支持长文案' },
+    { id: 'doubao-pro-4k', label: 'doubao-seed-2-1-turbo · 标准（推荐）', tier: 'standard', note: '质量速度平衡，适合日常生成' },
+    { id: 'doubao-pro-32k', label: 'doubao-seed-2-1-pro · 旗舰高质量', tier: 'plus', note: '最强质量，适合精写' },
   ],
   siliconflow: [
     { id: 'Qwen/Qwen2.5-7B-Instruct', label: 'Qwen2.5-7B · 免费额度（默认）', tier: 'fast', note: '响应迅捷，出片更快' },
